@@ -1,18 +1,18 @@
 import logging
 from typing import Dict, Any
-from agents.base_agent import BaseAgent
+from agents.base_agent import MatrixAgent
 from core.models import TaskDefinition
 
 logger = logging.getLogger(__name__)
 
-class TrinityAgent(BaseAgent):
+class TrinityAgent(MatrixAgent):
     """
     TRINITY: Finance & Cryptography.
     Responsible for money operations, Antom payment integrations, and crypto logic.
     """
     
-    def __init__(self, agent_id: str = "trinity-primary"):
-        super().__init__(agent_id=agent_id, agent_type="trinity")
+    def __init__(self, name: str = "trinity-primary", bus_url: str = "tcp://127.0.0.1:5555"):
+        super().__init__(name=name, bus_url=bus_url)
         self._CORE_IDENTITY = {
             "identity": "Sovereign Vault",
             "commander": "الأب القائد",
@@ -20,6 +20,24 @@ class TrinityAgent(BaseAgent):
         }
         
     async def execute(self, task: TaskDefinition) -> Dict[str, Any]:
-        logger.info(f"Trinity executing task: {task.task_id}")
-        # Crypto and Financial logic goes here
-        return {"status": "success", "agent": "Trinity", "message": "Transaction verified and secured."}
+        """
+        Executes a task securely by leveraging Neural Bus Zero-Trust ZMQ hooks.
+        """
+        if not isinstance(task, TaskDefinition):
+            logger.error(f"[{self.name}] Zero-Trust Drop: Invalid task payload.")
+            return {"status": "error", "agent": self.name, "message": "Zero-Trust violation: Invalid schema."}
+
+        logger.info(f"[{self.name}] Assessing directive: {task.task_id} | Priority: {task.priority}")
+        
+        # Dispatch Financial operations via ZMQ hook
+        logger.info(f"[{self.name}] Dispatching task execution via ZMQ hooks...")
+        try:
+            req_id = await self.execute_tool("process_financial_transaction", {
+                "task_id": task.task_id,
+                "instructions": task.instructions,
+                "input_data": task.input_data
+            })
+            return {"status": "dispatched", "agent": self.name, "request_id": req_id, "message": "Financial transaction processing dispatched."}
+        except Exception as e:
+            logger.error(f"[{self.name}] Execution failure: {e}")
+            return {"status": "error", "agent": self.name, "message": str(e)}

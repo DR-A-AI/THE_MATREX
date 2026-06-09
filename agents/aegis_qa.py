@@ -38,17 +38,25 @@ class DeterministicGuillotine:
         try:
             tree = ast.parse(code_or_action)
             for node in ast.walk(tree):
-                if isinstance(node, ast.Call):
-                    if isinstance(node.func, ast.Name) and node.func.id in ['eval', 'exec', 'compile', 'globals', 'locals']:
+                if isinstance(node, ast.Name):
+                    if node.id in ['eval', 'exec', 'compile', 'globals', 'locals', '__import__', 'getattr', 'setattr', 'delattr', 'hasattr']:
+                        logging.critical(f"[Aegis QA] AST Guillotine dropped! Forbidden name detected: {node.id}")
+                        return False
+                elif isinstance(node, ast.Attribute):
+                    if node.attr in ['__class__', '__subclasses__', '__builtins__', '__dict__', '__base__', '__mro__', 'system', 'Popen']:
+                        logging.critical(f"[Aegis QA] AST Guillotine dropped! Forbidden attribute detected: {node.attr}")
+                        return False
+                elif isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Name) and node.func.id in ['eval', 'exec', 'compile', 'globals', 'locals', '__import__']:
                         logging.critical(f"[Aegis QA] AST Guillotine dropped! Forbidden call detected: {node.func.id}")
                         return False
                 elif isinstance(node, ast.Import):
                      for alias in node.names:
-                          if alias.name in ['os', 'sys', 'subprocess', 'pickle', 'pty']:
+                          if alias.name in ['os', 'sys', 'subprocess', 'pickle', 'pty', 'builtins', 'importlib']:
                                logging.critical(f"[Aegis QA] AST Guillotine dropped! Forbidden import detected: {alias.name}")
                                return False
                 elif isinstance(node, ast.ImportFrom):
-                     if node.module in ['os', 'sys', 'subprocess', 'pickle', 'pty']:
+                     if node.module in ['os', 'sys', 'subprocess', 'pickle', 'pty', 'builtins', 'importlib']:
                           logging.critical(f"[Aegis QA] AST Guillotine dropped! Forbidden from import detected: {node.module}")
                           return False
         except SyntaxError:

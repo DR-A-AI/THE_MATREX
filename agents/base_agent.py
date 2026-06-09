@@ -4,7 +4,11 @@ import logging
 import uuid
 import zmq
 import zmq.asyncio
+import msgpack
 from typing import Dict, Any, Optional
+from core.neural_bus import NeuralBusClient
+from core.models import EventPayload, EventType
+from datetime import datetime
 
 logger = logging.getLogger("MatrixAgent")
 
@@ -23,13 +27,9 @@ class MatrixAgent:
         self.name = name
         self.agent_id = str(uuid.uuid4())
         self.bus_url = bus_url
-        self.ctx = zmq.asyncio.Context.instance()
-        self.socket = self.ctx.socket(zmq.DEALER)
-        self.socket.identity = self.agent_id.encode('utf-8')
         
-        # Security: set timeout/linger to prevent infinite hanging
-        self.socket.setsockopt(zmq.LINGER, 0)
-        self.socket.setsockopt(zmq.RCVTIMEO, 5000)
+        # Security: Force NeuralBusClient instead of raw socket
+        self.client = NeuralBusClient(identity=self.agent_id, endpoint=self.bus_url)
         
         # Sovereign DNA Constraint: Immutable Core Identity
         self._CORE_IDENTITY = {
@@ -49,11 +49,13 @@ class MatrixAgent:
     async def start(self):
         """Connects to the Neural Bus and fetches initial schemas."""
         logger.info(f"[{self.name}] Booting and connecting to Neural Bus at {self.bus_url}...")
-        self.socket.connect(self.bus_url)
-        self._running = True
         
-        # Start background listener for responses and async tool hooks
-        self._listen_task = asyncio.create_task(self._listen_loop())
+        # Register handlers
+        self.client.register_handler(EventType.TASK_QUEUED.value, self._handle_event)
+        self.client.register_handler(EventType.STATE_UPDATE.value, self._handle_event)
+        
+        await self.client.start()
+        self._running = True
         
         # Fetch dynamic tool schemas
         await self.fetch_schemas()
@@ -62,80 +64,44 @@ class MatrixAgent:
         """Halts the agent gracefully."""
         logger.info(f"[{self.name}] Halting agent operations.")
         self._running = False
-        if self._listen_task:
-            self._listen_task.cancel()
-        self.socket.close(linger=0)
+        await self.client.stop()
 
     async def fetch_schemas(self):
         """Requests lightweight Tool Schemas from the Librarian Crawler."""
         logger.debug(f"[{self.name}] Requesting Tool Schema from Crawler via Neural Bus.")
-        request = {
-            "type": "GET_TOOLS",
-            "sender": self.agent_id
-        }
-        await self._send_request(request)
+        event = EventPayload(
+            event_type=EventType.SKILL_REQUEST,
+            source_agent_id=self.agent_id,
+            correlation_id=str(uuid.uuid4()),
+            payload={"action": "GET_TOOLS"}
+        )
+        await self.client.send(event)
 
     async def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
-        """Sends a non-blocking RPC request to the ZMQ hooks worker."""
+        """Sends a non-blocking RPC request via Neural Bus."""
         if not isinstance(tool_name, str) or not isinstance(arguments, dict):
             raise TypeError("Zero-Trust Violation: Invalid tool execution parameters.")
             
         req_id = str(uuid.uuid4())
         logger.info(f"[{self.name}] Dispatching RPC call to hooks worker: {tool_name} [{req_id}]")
-        request = {
-            "type": "CALL_TOOL",
-            "tool_name": tool_name,
-            "arguments": arguments,
-            "sender": self.agent_id,
-            "request_id": req_id
-        }
-        await self._send_request(request)
+        event = EventPayload(
+            event_type=EventType.TASK_QUEUED,
+            source_agent_id=self.agent_id,
+            correlation_id=req_id,
+            payload={
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
+        )
+        await self.client.send(event)
         return req_id
 
-    async def _send_request(self, payload: Dict[str, Any]):
-        """Encodes and dispatches payload via Zero-Trust parameters."""
-        try:
-            payload_bytes = json.dumps(payload).encode('utf-8')
-            # Sending DEALER -> ROUTER requires empty frame delimiter for proper REQ/REP wrapping
-            await self.socket.send_multipart([b"", payload_bytes])
-        except (TypeError, ValueError) as e:
-            logger.error(f"[{self.name}] Serialization failure. Zero-trust drop: {e}")
-
-    async def _listen_loop(self):
-        """Background loop to receive schemas, RPC results, and Watchdog pings."""
-        while self._running:
-            try:
-                # Non-blocking receive via zmq.asyncio
-                message = await self.socket.recv_multipart()
-                
-                if len(message) < 2:
-                    logger.warning(f"[{self.name}] Dropping malformed multipart message.")
-                    continue
-                    
-                payload_data = message[-1].decode('utf-8')
-                
-                try:
-                    payload = json.loads(payload_data)
-                    if not isinstance(payload, dict):
-                        raise ValueError("Payload must be a JSON object.")
-                    await self._handle_message(payload)
-                except json.JSONDecodeError:
-                    logger.error(f"[{self.name}] Zero-trust violation: Invalid JSON payload received.")
-                    
-            except zmq.error.Again:
-                # Timeout reached, continue loop
-                continue
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"[{self.name}] Critical fault in listen loop: {e}")
-                await asyncio.sleep(0.5)
-
-    async def _handle_message(self, payload: Dict[str, Any]):
+    async def _handle_event(self, event: EventPayload):
         """Processes and routes inbound payload definitions."""
-        msg_type = payload.get("type")
+        msg_type = event.event_type
+        payload = event.payload
         
-        if msg_type == "TOOL_SCHEMA_RESPONSE":
+        if msg_type == EventType.SKILL_INJECT:
             schema = payload.get("schema")
             if isinstance(schema, dict):
                 self.tool_schema = schema
@@ -143,14 +109,20 @@ class MatrixAgent:
             else:
                 logger.error(f"[{self.name}] Invalid schema format received.")
                 
-        elif msg_type == "TOOL_CALL_RESULT":
-            req_id = payload.get("request_id")
+        elif msg_type == EventType.TASK_COMPLETED:
+            req_id = event.correlation_id
             status = payload.get("status", "unknown")
             logger.info(f"[{self.name}] Tool Call Result [{req_id}] -> Status: {status}")
             
-        elif msg_type == "WATCHDOG_PING":
-            pong = {"type": "WATCHDOG_PONG", "sender": self.agent_id}
-            await self._send_request(pong)
+        elif msg_type == EventType.AGENT_HEARTBEAT:
+            pong_event = EventPayload(
+                event_type=EventType.AGENT_ALIVE,
+                source_agent_id=self.agent_id,
+                correlation_id=event.correlation_id,
+                payload={"status": "alive"}
+            )
+            await self.client.send(pong_event)
             
         else:
             logger.warning(f"[{self.name}] Unhandled or malicious message type blocked: {msg_type}")
+

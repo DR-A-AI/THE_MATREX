@@ -3,9 +3,11 @@
 # ==============================================================================
 
 from pydantic import BaseModel, Field
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 from enum import Enum
 from datetime import datetime
+
+SafeValue = Union[str, int, float, bool, None, list, dict]
 
 class EventType(str, Enum):
     """Valid event types in the neural bus"""
@@ -38,7 +40,7 @@ class EventPayload(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     source_agent_id: str
     correlation_id: str
-    payload: Dict[str, Any]
+    payload: Dict[str, SafeValue]
     metadata: Optional[Dict[str, str]] = None
     
     class Config:
@@ -49,7 +51,7 @@ class TaskDefinition(BaseModel):
     task_id: str
     agent_type: str  # neo, morpheus, smith, trinity, oracle
     instructions: str
-    input_data: Dict[str, Any]
+    input_data: Dict[str, SafeValue]
     priority: int = 5
     timeout_seconds: int = 300
     retry_count: int = 3
@@ -62,7 +64,7 @@ class QASubmission(BaseModel):
     content: str
     source_agent_id: str
     submission_time: datetime = Field(default_factory=datetime.utcnow)
-    metadata: Dict[str, Any]
+    metadata: Dict[str, SafeValue]
 
 class QAVerdict(BaseModel):
     """QA decision on artifact"""

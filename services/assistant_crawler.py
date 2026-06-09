@@ -36,10 +36,12 @@ class AssistantCrawler:
         """
         payload = event.payload
         platform = payload.get("platform", "Unknown")
-        token = payload.get("extracted_token")
+        token = payload.get("extracted_token", "")
         extractor = event.source_agent_id
         
-        logger.info(f"[AssistantCrawler] 🚨 CRITICAL: Received extracted token for [{platform}] from Extractor: {extractor}")
+        masked_token = f"***{token[-4:]}" if len(token) > 4 else "***"
+        
+        logger.info(f"[AssistantCrawler] 🚨 CRITICAL: Received extracted token for [{platform}] from Extractor: {extractor}. Token: {masked_token}")
         logger.info(f"[AssistantCrawler] Forwarding to Main Crawler for vault storage...")
         
         # Here we broadcast the KEY_INJECT back to the agents to fill their stashes

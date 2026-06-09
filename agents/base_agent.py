@@ -1,50 +1,58 @@
-﻿import asyncio
-import os
-from core.neural_bus import SovereignNeuralBus
+import asyncio
+import logging
+import uuid
+import time
+from typing import Dict, Any, Optional
+from core.neural_bus import NeuralBusClient
+from core.models import EventType, EventPayload
 
-class SecureMatrixAgent:
-    """
-    Sovereign Node. Zero-Trust compliant.
-    Requests tokens via direct REQ socket, NEVER accepts blind injections.
-    """
-    def __init__(self, agent_id: str, bus: SovereignNeuralBus):
-        self.agent_id = agent_id
-        self.bus = bus
-        
-        self.context = self.bus.context
-        self.req_socket = self.context.socket(import_zmq().REQ)
-        self.req_socket.setsockopt_string(import_zmq().IDENTITY, self.agent_id)
-        self.req_socket.connect("tcp://127.0.0.1:5556")
-        
-        # We DO NOT HAVE an `emergency_token_stash`. State is fetched JIT.
-        self.active_token_id = None
+logger = logging.getLogger("MatrixAgent")
 
-    async def secure_task_execution(self, scope: str):
-        """Perform a task that requires a secure token using JIT provisioning."""
-        print(f"[{self.agent_id}] Need token for {scope}. Requesting securely via REQ/REP...")
+class MatrixAgent:
+    def __init__(self, name: str, bus_url: str = "tcp://127.0.0.1:5555"):
+        self.name = name
+        self.agent_id = f"{name}-{uuid.uuid4().hex[:8]}"
+        self.client = NeuralBusClient(identity=self.agent_id, endpoint=bus_url)
+        self._running = False
         
-        # 1. Request token JIT
-        await self.req_socket.send_string(f"REQUEST_TOKEN:{scope}")
-        response = await self.req_socket.recv_string()
+        # Emergency Stash injected by Assistant Crawler
+        # Dictionary format: {token_string: expiration_timestamp}
+        self.emergency_token_stash: Dict[str, float] = {}
+        self.MAX_STASH_SIZE = 2
+
+    async def start(self):
+        logger.info(f"[{self.name}] Booting and connecting to Neural Bus at {self.client.endpoint}...")
+        self.client.register_handler(EventType.KEY_INJECT.value, self._handle_key_inject)
+        await self.client.start()
+        self._running = True
+
+    async def stop(self):
+        logger.info(f"[{self.name}] Halting agent operations.")
+        self._running = False
+        await self.client.stop()
+
+    def _clean_stash(self):
+        """Garbage collection for stash to prevent memory leaks."""
+        now = time.time()
+        expired = [k for k, v in self.emergency_token_stash.items() if v < now]
+        for k in expired:
+            del self.emergency_token_stash[k]
+
+    async def _handle_key_inject(self, event: EventPayload):
+        self._clean_stash()
         
-        if response.startswith("TOKEN_GRANTED"):
-            _, token_id = response.split(":")
-            self.active_token_id = token_id
-            print(f"[{self.agent_id}] JIT Token ID received: {token_id[:8]}...")
+        if len(self.emergency_token_stash) >= self.MAX_STASH_SIZE:
+            # Overwrite oldest to prevent memory leaks
+            oldest = min(self.emergency_token_stash, key=self.emergency_token_stash.get)
+            del self.emergency_token_stash[oldest]
             
-            # 2. Use token immediately and discard
-            # In a real scenario, it sends the token_id to the service.
-            self.active_token_id = None
-            print(f"[{self.agent_id}] Token consumed and memory wiped.")
-        else:
-            print(f"[{self.agent_id}] Token request denied: {response}")
-
-    async def run(self):
-        print(f"[{self.agent_id}] Online. Compliant with Sovereign Razor Zero-Trust.")
-        await asyncio.sleep(2)
-        await self.secure_task_execution("core_access")
+        payload = event.payload
+        token = payload.get("token")
+        scope = payload.get("scope")
         
-def import_zmq():
-    import zmq
-    return zmq
-
+        # Log masking to prevent plaintext logging of tokens
+        masked_token = f"***{token[-4:]}" if token and len(token) > 4 else "***"
+        logger.info(f"[{self.name}] Stash replenished with {scope} key: {masked_token}")
+        
+        # Store with a TTL of 300 seconds (5 minutes)
+        self.emergency_token_stash[token] = time.time() + 300.0

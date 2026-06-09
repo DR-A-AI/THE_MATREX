@@ -47,8 +47,12 @@ class AuthVault:
             "gcp_service_account": "J:\\مجلد الاسرار\\1\\theai-world-443058ed6fa2.json"
         }
     
-    def request_token(self, scope: str, ttl_minutes: int = 5) -> SecretToken:
-        """Issue a strictly short-lived secret token."""
+    def request_token(self, agent_type: str, scope: str, ttl_minutes: int = 5) -> SecretToken:
+        """Issue a strictly short-lived secret token. Only Trinity (Vault) and Neo (Orchestrator) hold the keys."""
+        if agent_type not in ["trinity", "neo"]:
+            logger.critical(f"CRITICAL Security Halt: Unauthorized agent '{agent_type}' attempted to access Sovereign Secrets.")
+            raise PermissionError(f"CRITICAL Security Halt: Unauthorized agent '{agent_type}'. Only Trinity and Neo are permitted.")
+            
         if scope not in self.scope_map:
             logger.critical(f"Security Halt: Access denied to unmapped scope: {scope}")
             raise ValueError(f"Invalid scope: {scope}")
@@ -59,7 +63,7 @@ class AuthVault:
             ttl_minutes=ttl_minutes
         )
         self.active_tokens[token.token_id] = token
-        logger.info(f"Issued ephemeral token for scope: {scope} (TTL: {ttl_minutes}m)")
+        logger.info(f"Issued ephemeral token for scope: {scope} to agent: {agent_type} (TTL: {ttl_minutes}m)")
         return token
     
     async def load_secret(self, token: SecretToken) -> Any:

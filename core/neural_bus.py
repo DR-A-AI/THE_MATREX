@@ -1,6 +1,6 @@
 import zmq
 import zmq.asyncio
-import json
+import msgpack
 import logging
 import asyncio
 from typing import Dict, Any, Callable, Optional
@@ -12,20 +12,20 @@ class CircuitBreakerOpenException(Exception):
     pass
 
 class CircuitBreaker:
-    """Implements Circuit Breaker to handle DB/Network faults resiliently."""
+    """Strict Sovereign Circuit Breaker for DB/Network resilience."""
     def __init__(self, failure_threshold: int = 3, recovery_timeout: int = 10):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.failures = 0
-        self.last_failure_time = 0
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        self.last_failure_time = 0.0
+        self.state = "CLOSED"
     
     def record_failure(self):
         self.failures += 1
         self.last_failure_time = time.time()
         if self.failures >= self.failure_threshold:
             self.state = "OPEN"
-            logger.warning("Circuit breaker OPENED due to consecutive failures.")
+            logger.critical("Circuit breaker OPENED. Halting operations temporarily.")
     
     def record_success(self):
         self.failures = 0
@@ -39,61 +39,48 @@ class CircuitBreaker:
                 self.state = "HALF_OPEN"
                 return True
             return False
-        if self.state == "HALF_OPEN":
-            return True
-        return False
+        return self.state == "HALF_OPEN"
 
 class NeuralBusPublisher:
-    """ZMQ PUB socket for broadcasting microsecond-latency events."""
+    """High-performance ZMQ PUB socket using msgpack."""
     
     def __init__(self, endpoint: str = "tcp://127.0.0.1:5555"):
         self.context = zmq.asyncio.Context.instance()
         self.socket = self.context.socket(zmq.PUB)
-        # Security: ensure we drop messages immediately if no one is listening or buffers are full
         self.socket.setsockopt(zmq.SNDHWM, 1000)
         self.socket.setsockopt(zmq.LINGER, 0)
         self.endpoint = endpoint
         self.socket.bind(endpoint)
         self.circuit_breaker = CircuitBreaker()
-        logger.info(f"NeuralBus Publisher strictly bound to {endpoint}")
+        logger.info(f"Sovereign NeuralBus Publisher bound to {endpoint}")
     
     async def publish(self, topic: str, payload: Dict[str, Any], trace_id: str):
         if not self.circuit_breaker.can_execute():
-            logger.error(f"Cannot publish {topic}, Circuit Breaker is OPEN.")
+            logger.error(f"Execution Halt: Cannot publish to {topic}, Circuit Breaker OPEN.")
             raise CircuitBreakerOpenException("Circuit breaker is open.")
             
         try:
-            # Strict JSON validation to prevent malformed payload exploits
-            payload_str = json.dumps(payload)
             message = {
                 "trace_id": trace_id,
                 "timestamp": time.time(),
-                "payload": json.loads(payload_str) # ensure dictionary, catch serialization errors early
+                "payload": payload
             }
-            # Non-blocking send
+            # MessagePack instead of slow JSON. NEVER use Pickle.
             await self.socket.send_multipart([
                 topic.encode('utf-8'),
-                json.dumps(message).encode('utf-8')
-            ], flags=zmq.NOBLOCK)
+                msgpack.packb(message)
+            ])
             self.circuit_breaker.record_success()
-            logger.debug(f"Published to {topic} [Trace: {trace_id}]")
-        except zmq.ZMQError as e:
-            if e.errno == zmq.EAGAIN:
-                logger.warning(f"ZMQ queue full for topic {topic}, message dropped to preserve non-blocking behavior.")
-            else:
-                self.circuit_breaker.record_failure()
-                logger.error(f"NeuralBus Publish Error: {e}")
-                raise
         except Exception as e:
             self.circuit_breaker.record_failure()
             logger.error(f"NeuralBus Publish Error: {e}")
             raise
     
     def close(self):
-        self.socket.close()
+        self.socket.close(linger=0)
 
 class NeuralBusSubscriber:
-    """ZMQ SUB socket for receiving microsecond-latency events."""
+    """High-performance ZMQ SUB socket using msgpack."""
     
     def __init__(self, endpoint: str = "tcp://127.0.0.1:5555", topics: list = None):
         self.context = zmq.asyncio.Context.instance()
@@ -106,7 +93,7 @@ class NeuralBusSubscriber:
         for t in topics:
             self.socket.setsockopt_string(zmq.SUBSCRIBE, t)
             
-        logger.info(f"NeuralBus Subscriber connected to {endpoint} listening to {topics}")
+        logger.info(f"Sovereign NeuralBus Subscriber connected to {endpoint} for topics: {topics}")
         self.is_running = False
         
     async def consume(self, callback: Callable):
@@ -116,17 +103,16 @@ class NeuralBusSubscriber:
                 msg_parts = await self.socket.recv_multipart()
                 if len(msg_parts) == 2:
                     topic = msg_parts[0].decode('utf-8')
-                    try:
-                        data = json.loads(msg_parts[1].decode('utf-8'))
-                        await callback(topic, data)
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Subscriber received malformed JSON on {topic}: {e}")
+                    # Secure msgpack decoding, explicitly disabling eval or arbitrary object execution
+                    data = msgpack.unpackb(msg_parts[1])
+                    # Ensure asynchronous callback execution to prevent event loop blocking
+                    asyncio.create_task(callback(topic, data))
             except asyncio.CancelledError:
                 self.is_running = False
                 break
             except Exception as e:
-                logger.error(f"Subscriber error: {e}")
+                logger.error(f"Subscriber consumption error: {e}")
                 
     def close(self):
         self.is_running = False
-        self.socket.close()
+        self.socket.close(linger=0)

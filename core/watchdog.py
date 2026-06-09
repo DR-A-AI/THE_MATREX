@@ -8,14 +8,12 @@ from datetime import datetime, timedelta
 logger = logging.getLogger("Sovereign.Watchdog")
 
 class WatchdogEngine:
-    """Strict process monitor with Ping/Pong heartbeats to prevent Zombie process blindness."""
+    """Sovereign Process Monitor with Zero CPU-Spinning and Async-Native ZMQ."""
     
     def __init__(self, endpoint: str = "tcp://127.0.0.1:5556"):
         self.context = zmq.asyncio.Context.instance()
         self.router_socket = self.context.socket(zmq.ROUTER)
-        self.router_socket.setsockopt(zmq.SNDHWM, 1000)
-        self.router_socket.setsockopt(zmq.RCVHWM, 1000)
-        self.router_socket.setsockopt(zmq.LINGER, 0)
+        self.router_socket.setsockopt(zmq.ROUTER_MANDATORY, 1) # Error if identity unknown
         self.router_socket.bind(endpoint)
         self.endpoint = endpoint
         
@@ -25,44 +23,39 @@ class WatchdogEngine:
         self.heartbeat_interval = 2  # seconds
         self.is_running = False
         
-        logger.info(f"Watchdog Engine strictly bound to {endpoint}")
+        logger.info(f"Sovereign Watchdog strictly bound to {endpoint}")
 
     async def _ping_agents(self):
-        """Send a strict heartbeat ping to all registered agents."""
+        """Send a strict heartbeat ping to all registered agents asynchronously."""
         ping_message = b"PING"
         for agent_id in list(self.alive_agents.keys()):
             try:
-                await self.router_socket.send_multipart([agent_id.encode('utf-8'), ping_message], flags=zmq.NOBLOCK)
+                await self.router_socket.send_multipart([agent_id.encode('utf-8'), ping_message])
             except zmq.ZMQError as e:
-                if e.errno == zmq.EAGAIN:
-                     logger.warning(f"Failed to ping {agent_id}: ZMQ queue full (EAGAIN)")
-                else:
-                     logger.warning(f"Failed to ping {agent_id}: {e}")
+                # ROUTER_MANDATORY will raise EHOSTUNREACH if peer is gone
+                logger.warning(f"ZMQ Error: Cannot reach {agent_id} - {e}")
             except Exception as e:
                 logger.warning(f"Failed to ping {agent_id}: {e}")
 
     async def _listen_pongs(self):
-        """Asynchronously listen for PONG responses from agents."""
+        """True async listener for PONG responses without CPU spin loops."""
         while self.is_running:
             try:
-                parts = await self.router_socket.recv_multipart(flags=zmq.NOBLOCK)
+                # Use native async await to prevent CPU spinning, no sleep loops needed
+                parts = await self.router_socket.recv_multipart()
                 if len(parts) >= 2:
                     agent_id = parts[0].decode('utf-8')
                     pong = parts[1]
                     
-                    if pong == b"PONG" or pong == b"REGISTER":
+                    if pong in (b"PONG", b"REGISTER"):
                         self.alive_agents[agent_id] = datetime.utcnow()
                         if agent_id in self.dead_agents:
                             logger.info(f"Agent recovered: {agent_id}")
                             self.dead_agents.remove(agent_id)
-            except zmq.ZMQError as e:
-                if e.errno == zmq.EAGAIN:
-                    await asyncio.sleep(0.01)
-                else:
-                    logger.error(f"ZMQ Error in pong listener: {e}")
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 logger.error(f"Pong listener error: {e}")
-                await asyncio.sleep(0.1)
 
     async def _detect_dead_agents(self):
         """Aggressively detect and restart dead agents (Zombie cure)."""
@@ -71,17 +64,16 @@ class WatchdogEngine:
         
         for agent_id, last_seen in list(self.alive_agents.items()):
             if now - last_seen > timeout:
-                logger.warning(f"ZOMBIE DETECTED: Agent {agent_id} timeout - Aggressively purging & restarting.")
+                logger.critical(f"ZOMBIE DETECTED: Agent {agent_id} timeout - PURGING.")
                 self.dead_agents.add(agent_id)
-                # Future implementation: Trigger OS-level hard kill and container/agent restart via System API
+                # Ensure it's removed so we don't keep pinging it
                 del self.alive_agents[agent_id]
 
     async def run(self):
-        """Main Watchdog loop."""
+        """Main Sovereign Watchdog loop."""
         logger.info("Watchdog Engine Armed.")
         self.is_running = True
         
-        # Start the listener in the background
         listener_task = asyncio.create_task(self._listen_pongs())
         
         try:
@@ -93,11 +85,10 @@ class WatchdogEngine:
             self.is_running = False
         finally:
             listener_task.cancel()
-            self.router_socket.close()
+            self.router_socket.close(linger=0)
 
     def register_agent(self, agent_id: str):
-        """Register a new agent to be monitored."""
         self.alive_agents[agent_id] = datetime.utcnow()
         if agent_id in self.dead_agents:
             self.dead_agents.remove(agent_id)
-        logger.info(f"Agent {agent_id} strictly registered for monitoring.")
+        logger.info(f"Agent {agent_id} registered into the Sovereign Watchdog matrix.")

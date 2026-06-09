@@ -30,7 +30,7 @@ class SecretToken:
 class AuthVault:
     """Zero-Trust Secret Management with async non-blocking I/O and strict garbage collection."""
     
-    def __init__(self, secret_path: str = "J:\\مجلد الاسرار\\1"):
+    def __init__(self, secret_path: str = "J:\\THE_MATRIX\\secrets"):
         self.secret_path = os.path.abspath(secret_path)
         self.active_tokens: Dict[str, SecretToken] = {}
         self.scope_map = self._build_scope_map()
@@ -38,13 +38,13 @@ class AuthVault:
         logger.info("Sovereign Zero-Trust Auth Vault initialized.")
     
     def _build_scope_map(self) -> Dict[str, str]:
-        """Map predefined scopes to their secure, normalized secret paths."""
+        \"\"\"Map predefined scopes to their secure, normalized secret paths.\"\"\"
         return {
-            "gcp_p12": "J:\\مجلد الاسرار\\1\\theai-world-ff9cafd706c1.p12",
-            "firebase_admin": "J:\\مجلد الاسرار\\1\\theai-world-firebase-adminsdk-fbsvc-d96be6f9b6.json",
-            "gcp_client_secret": "J:\\مجلد الاسرار\\1\\client_secret_759852947193-9upqqb6ljgh22oi45lqrcp9i3814nrsc.apps.googleusercontent.com.json",
-            "gcp_text": "J:\\مجلد الاسرار\\1\\Google Cloud  G SuitGoogle Cloud  G.txt",
-            "gcp_service_account": "J:\\مجلد الاسرار\\1\\theai-world-443058ed6fa2.json"
+            "gcp_p12": os.path.normpath(os.path.join(self.secret_path, "theai-world-ff9cafd706c1.p12")),
+            "firebase_admin": os.path.normpath(os.path.join(self.secret_path, "theai-world-firebase-adminsdk-fbsvc-d96be6f9b6.json")),
+            "gcp_client_secret": os.path.normpath(os.path.join(self.secret_path, "client_secret_759852947193-9upqqb6ljgh22oi45lqrcp9i3814nrsc.apps.googleusercontent.com.json")),
+            "gcp_text": os.path.normpath(os.path.join(self.secret_path, "Google Cloud  G SuitGoogle Cloud  G.txt")),
+            "gcp_service_account": os.path.normpath(os.path.join(self.secret_path, "theai-world-443058ed6fa2.json"))
         }
     
     def request_token(self, agent_type: str, scope: str, ttl_minutes: int = 5) -> SecretToken:

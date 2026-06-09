@@ -17,30 +17,42 @@ class SkillCrawler:
         self.indexed_schema = {}
         self._running = False
 
+    def _traverse_dir(self, directory: str):
+        results = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.endswith('.json') or file.endswith('.yaml') or file.endswith('SKILL.md'):
+                    results.append((root, file))
+        return results
+
     async def crawl_skills(self):
         logger.info(f"Librarian Crawler initializing index at: {self.target_dir}")
-        if not os.path.exists(self.target_dir):
+        if not await asyncio.to_thread(os.path.exists, self.target_dir):
             logger.error(f"Target directory {self.target_dir} does not exist.")
             return
 
         schema = {}
-        for root, _, files in os.walk(self.target_dir):
-            for file in files:
-                if file.endswith('.json') or file.endswith('.yaml') or file.endswith('SKILL.md'):
-                    # Read the schema or basic details. We'll simplify and just record path and name for the truth.
-                    # This simulates actual parsing.
-                    skill_name = os.path.basename(root)
-                    if skill_name not in schema:
-                        schema[skill_name] = {
-                            "name": skill_name,
-                            "path": root,
-                            "files": []
-                        }
-                    schema[skill_name]["files"].append(file)
-                    
-                    # We can use aiofiles if we were actually reading content heavily.
-                    # For a basic metadata scan, os.walk is fine, but we'll yield control just in case.
-                    await asyncio.sleep(0)
+        file_paths = await asyncio.to_thread(self._traverse_dir, self.target_dir)
+        
+        for root, file in file_paths:
+            skill_name = os.path.basename(root)
+            if skill_name not in schema:
+                schema[skill_name] = {
+                    "name": skill_name,
+                    "path": root,
+                    "files": [],
+                    "metadata": {}
+                }
+            schema[skill_name]["files"].append(file)
+            
+            # Use true asynchronous file I/O
+            full_path = os.path.join(root, file)
+            try:
+                async with aiofiles.open(full_path, mode='r', encoding='utf-8') as f:
+                    content = await f.read()
+                    schema[skill_name]["metadata"][file] = f"Size: {len(content)} chars"
+            except Exception as e:
+                logger.error(f"Failed to read {full_path}: {e}")
 
         self.indexed_schema = schema
         logger.info(f"Librarian Crawler finished indexing. Secured {len(self.indexed_schema)} skills.")

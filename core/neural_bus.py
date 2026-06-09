@@ -46,7 +46,7 @@ class CircuitBreaker:
 
 class NeuralBusBroker:
     """ROUTER socket acting as the main neural bus."""
-    def __init__(self, endpoint: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, endpoint: str = "tcp://127.0.0.1:5555", max_concurrent_tasks: int = 100):
         self.context = zmq.asyncio.Context.instance()
         self.socket = self.context.socket(zmq.ROUTER)
         self.socket.setsockopt(zmq.ROUTER_MANDATORY, 1)
@@ -57,6 +57,7 @@ class NeuralBusBroker:
         self._running = False
         self.handlers = {}
         self._task = None
+        self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
 
     def register_handler(self, event_type: str, handler: Callable):
         self.handlers[event_type] = handler
@@ -90,7 +91,9 @@ class NeuralBusBroker:
                 
                 handler = self.handlers.get(event.event_type)
                 if handler:
-                    asyncio.create_task(handler(identity, event))
+                    await self.semaphore.acquire()
+                    task = asyncio.create_task(handler(identity, event))
+                    task.add_done_callback(lambda t: self.semaphore.release())
                 else:
                     logger.debug(f"No handler for event: {event.event_type}")
                     
@@ -103,7 +106,7 @@ class NeuralBusBroker:
         try:
             # We explicitly handle event serialization. We use event.model_dump() instead of dict() for pydantic v2 if needed, 
             # but model.dict() works usually. EventPayload is inherited from BaseModel.
-            payload_dict = event.dict()
+            payload_dict = event.model_dump()
             # msgpack requires datetime to be serialized properly. Let's convert timestamps to isoformat.
             payload_dict['timestamp'] = payload_dict['timestamp'].isoformat()
             
@@ -125,7 +128,7 @@ class NeuralBusBroker:
 
 class NeuralBusClient:
     """DEALER socket for agents to connect to the neural bus."""
-    def __init__(self, identity: str, endpoint: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, identity: str, endpoint: str = "tcp://127.0.0.1:5555", max_concurrent_tasks: int = 100):
         self.context = zmq.asyncio.Context.instance()
         self.socket = self.context.socket(zmq.DEALER)
         self.identity = identity.encode('utf-8')
@@ -137,6 +140,7 @@ class NeuralBusClient:
         self._running = False
         self.handlers = {}
         self._task = None
+        self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
         logger.info(f"Sovereign NeuralBus Client (DEALER) {identity} connected to {endpoint}")
 
     def register_handler(self, event_type: str, handler: Callable):
@@ -168,7 +172,9 @@ class NeuralBusClient:
                     
                 handler = self.handlers.get(event.event_type)
                 if handler:
-                    asyncio.create_task(handler(event))
+                    await self.semaphore.acquire()
+                    task = asyncio.create_task(handler(event))
+                    task.add_done_callback(lambda t: self.semaphore.release())
                     
             except asyncio.CancelledError:
                 break
@@ -180,7 +186,7 @@ class NeuralBusClient:
             raise CircuitBreakerOpenException("Circuit breaker is open.")
             
         try:
-            payload_dict = event.dict()
+            payload_dict = event.model_dump()
             payload_dict['timestamp'] = payload_dict['timestamp'].isoformat()
             payload_bytes = msgpack.packb(payload_dict)
             await self.socket.send_multipart([payload_bytes])

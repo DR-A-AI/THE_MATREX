@@ -19,6 +19,7 @@ class EventType(str, Enum):
     QA_VERDICT = "qa_verdict"
     STATE_UPDATE = "state_update"
     SKILL_INJECT = "skill_inject"
+    SKILL_REQUEST = "skill_request"
     ERROR = "error"
     SOVEREIGN_OVERRIDE = "sovereign_override"
 

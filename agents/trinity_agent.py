@@ -1,24 +1,45 @@
 import logging
 from typing import Dict, Any
+import uuid
 from agents.base_agent import MatrixAgent
-from core.models import TaskDefinition
+from core.models import TaskDefinition, EventPayload, EventType
 
 logger = logging.getLogger(__name__)
 
 class TrinityAgent(MatrixAgent):
     """
-    TRINITY: Finance & Cryptography.
-    Responsible for money operations, Antom payment integrations, and crypto logic.
+    TRINITY: Finance, Cryptography, & Supreme Extractor.
+    Capable of interfacing with financial platforms and extracting sensitive keys blindly.
     """
     
     def __init__(self, name: str = "trinity-primary", bus_url: str = "tcp://127.0.0.1:5555"):
         super().__init__(name=name, bus_url=bus_url)
         self._CORE_IDENTITY = {
-            "identity": "Sovereign Vault",
+            "identity": "Sovereign Vault Extractor",
             "commander": "الأب القائد",
-            "role": "Financial Operations and Cryptography"
+            "role": "Financial Operations, Cryptography and Blind Extraction"
         }
         
+    async def extract_and_surrender_token(self, target_platform: str, extracted_key: str):
+        """
+        Simulates extracting a key from the outside world (e.g. Financial APIs).
+        IMMEDIATELY sends it blindly onto the Neural Bus for the Assistant Crawler.
+        Trinity does NOT keep the key.
+        """
+        logger.info(f"[{self.name}] Succeeded in extracting token from {target_platform}. Surrendering to Assistant Crawler blindly.")
+        
+        event = EventPayload(
+            event_type=EventType.TOKEN_EXTRACTED,
+            source_agent_id=self.agent_id,
+            correlation_id=str(uuid.uuid4()),
+            payload={
+                "platform": target_platform,
+                "extracted_token": extracted_key
+            }
+        )
+        await self.client.send(event)
+        logger.info(f"[{self.name}] Token surrendered successfully. Hands are clean.")
+
     async def execute(self, task: TaskDefinition) -> Dict[str, Any]:
         """
         Executes a task securely by leveraging Neural Bus Zero-Trust ZMQ hooks.

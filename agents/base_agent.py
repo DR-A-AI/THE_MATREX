@@ -248,15 +248,48 @@ class MatrixAgent:
                         temperature=0.7
                     )
                     
-                    # Offload API call to a thread to keep ZMQ loop reactive
-                    def run_gen():
-                        return client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=prompt,
-                            config=config
-                        )
-                        
-                    response = await asyncio.to_thread(run_gen)
+                    # Offload API call to a thread to keep ZMQ loop reactive with retry on 429/RESOURCE_EXHAUSTED
+                    import re
+                    import random
+                    
+                    async def generate_with_retry():
+                        delay = 2.0
+                        max_retries = 5
+                        for attempt in range(max_retries):
+                            try:
+                                def run_gen():
+                                    return client.models.generate_content(
+                                        model="gemini-2.5-flash",
+                                        contents=prompt,
+                                        config=config
+                                    )
+                                return await asyncio.to_thread(run_gen)
+                            except Exception as e:
+                                err_str = str(e)
+                                is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA"])
+                                if is_rate_limit and attempt < max_retries - 1:
+                                    retry_wait = None
+                                    match = re.search(r"retryDelay':\s*'(\d+)(?:\.\d+)?s'", err_str)
+                                    if not match:
+                                        match = re.search(r'retryDelay":\s*"(\d+)(?:\.\d+)?s"', err_str)
+                                    if not match:
+                                        match = re.search(r"retry\s+(?:in|after)\s+(\d+)(?:\.\d+)?s", err_str, re.IGNORECASE)
+                                    
+                                    if match:
+                                        try:
+                                            retry_wait = float(match.group(1)) + 1.0
+                                        except ValueError:
+                                            pass
+                                    
+                                    if retry_wait is None:
+                                        retry_wait = delay * (1.5 ** attempt) + random.uniform(0.5, 1.5)
+                                    
+                                    logger.warning(f"[{self.name}] Rate limit (429/RESOURCE_EXHAUSTED) hit. Retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}). Error: {e}")
+                                    await asyncio.sleep(retry_wait)
+                                else:
+                                    raise
+                                    
+                    response = await generate_with_retry()
                     response_msg = response.text
                 except Exception as e:
                     logger.error(f"[{self.name}] Gemini generation failed: {e}")

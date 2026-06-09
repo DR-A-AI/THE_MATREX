@@ -10,9 +10,18 @@ echo          ///  SOVEREIGN MATRIX BOOT SEQUENCE INITIATED  ///
 echo ======================================================================
 echo.
 
-REM Kill any existing processes on port 5173 (Vite) to avoid conflicts
-echo [PRE-BOOT] Cleaning up port 5173 (Vite)...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173"') do (
+REM Kill any existing processes on ports 5173, 8000, 5555, and 5557 to avoid conflicts
+echo [PRE-BOOT] Cleaning up old Matrix stack processes (ports 5173, 8000, 5555, 5557)...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:":5173" ^| findstr /C:"LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:":8000" ^| findstr /C:"LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:":5555" ^| findstr /C:"LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:":5557" ^| findstr /C:"LISTENING"') do (
     taskkill /F /PID %%a >nul 2>&1
 )
 timeout /t 1 /nobreak >nul

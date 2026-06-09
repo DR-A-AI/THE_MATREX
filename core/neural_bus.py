@@ -43,6 +43,8 @@ class NeuralBusClient:
         self.socket.connect(self.endpoint)
         logger.info(f"Sovereign NeuralBus Client (DEALER) {self.identity} connected to {self.endpoint}")
         self._listen_task = asyncio.create_task(self._listen_loop())
+        # Register our dealer identity with the router
+        await self.socket.send_multipart([b"REGISTER", b""])
 
     async def stop(self):
         if self._listen_task:
@@ -95,7 +97,8 @@ class NeuralBusClient:
                     
                     # 4. Dispatch Event
                     event = EventPayload(**msg_dict)
-                    handler = self.handlers.get(event.event_type.value)
+                    event_type_str = event.event_type.value if hasattr(event.event_type, 'value') else event.event_type
+                    handler = self.handlers.get(event_type_str)
                     if handler:
                         asyncio.create_task(handler(event))
                         
@@ -110,6 +113,9 @@ class NeuralBusRouter:
         self.endpoint = endpoint
         self.context = zmq.asyncio.Context.instance()
         self.socket = self.context.socket(zmq.ROUTER)
+        # Enable mandatory routing to detect offline clients
+        self.socket.setsockopt(zmq.ROUTER_MANDATORY, 1)
+        self.active_clients = set()
         self._running = False
         
     async def start(self):
@@ -118,14 +124,33 @@ class NeuralBusRouter:
         logger.info(f"Sovereign NeuralBus Router started at {self.endpoint}")
         while self._running:
             try:
-                # Basic Dealer/Router forwarder for demo. 
-                # In production, this would do topic matching.
                 parts = await self.socket.recv_multipart()
-                # Broadcast back to everyone (PUB/SUB style via DEALER/ROUTER is tricky,
-                # but for this matrix, agents just need to receive the broadcast).
-                # Actually, a true event bus uses PUB/SUB or a specialized forwarder.
-                # To keep it simple, we just echo back or rely on the fact that 
-                # NeuralBusClient is just an abstraction.
-                pass
+                if len(parts) >= 3:
+                    sender = parts[0]
+                    self.active_clients.add(sender)
+                    
+                    signature = parts[1]
+                    msg_bytes = parts[2]
+                    
+                    # If it's a registration frame, do not broadcast
+                    if signature == b"REGISTER":
+                        continue
+                    
+                    # Broadcast to all other active clients
+                    disconnected = []
+                    for client in list(self.active_clients):
+                        if client != sender:
+                            try:
+                                await self.socket.send_multipart([client, signature, msg_bytes])
+                            except zmq.ZMQError as e:
+                                # Host unreachable (EHOSTUNREACH)
+                                logger.info(f"Client {client.decode(errors='replace')} unreachable, purging.")
+                                disconnected.append(client)
+                            except Exception:
+                                disconnected.append(client)
+                    for d in disconnected:
+                        self.active_clients.discard(d)
             except asyncio.CancelledError:
                 break
+            except Exception as e:
+                logger.error(f"Error in NeuralBusRouter loop: {e}")

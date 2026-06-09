@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@import '@syncfusion/ej2-base/styles/fabric-dark.css';
+
+:root {
+  --neon-blue: #00f3ff;
+  --deep-blue: #020a17;
+  --glass-bg: rgba(2, 10, 23, 0.6);
+  --glass-border: rgba(0, 243, 255, 0.3);
+}
+
+body {
+  margin: 0;
+  background-color: var(--deep-blue);
+  color: var(--neon-blue);
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(0, 243, 255, 0.15), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(0, 243, 255, 0.15), transparent 25%);
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 0 15px rgba(0, 243, 255, 0.1);
+  border-radius: 0.75rem;
+}
+
+.hologram-text {
+  text-shadow: 0 0 8px rgba(0, 243, 255, 0.6);
+}
+
+.neon-btn {
+  background: transparent;
+  border: 1px solid var(--neon-blue);
+  color: var(--neon-blue);
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.neon-btn:hover {
+  background: rgba(0, 243, 255, 0.2);
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+}
+
+/* Syncfusion Holographic overrides */
+.e-control, .e-css {
+  font-family: 'Inter', sans-serif !important;
+}

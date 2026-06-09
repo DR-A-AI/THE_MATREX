@@ -1,6 +1,6 @@
-﻿import asyncio
+import asyncio
 import time
-from core.neural_bus import SovereignNeuralBus
+from core.neural_bus import NeuralBusClient
 from core.auth_vault import AuthVault
 
 class SecureLibrarian:
@@ -8,13 +8,13 @@ class SecureLibrarian:
     Sovereign Librarian. No blind injection!
     Responds to explicit Token Requests via secure channels.
     """
-    def __init__(self, bus: SovereignNeuralBus, vault: AuthVault):
+    def __init__(self, bus: NeuralBusClient, vault: AuthVault):
         self.bus = bus
         self.vault = vault
         
         self.context = self.bus.context
         self.router_socket = self.context.socket(import_zmq().ROUTER)
-        self.router_socket.bind("tcp://127.0.0.1:5556")
+        self.router_socket.bind("tcp://127.0.0.1:5557")
 
     async def handle_token_requests(self):
         """Secure JIT token provisioning using strict REQ/REP over ZMQ."""

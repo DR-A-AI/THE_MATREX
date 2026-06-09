@@ -11,6 +11,7 @@ from core.auth_vault import AuthVault
 from core.failsafe import FailsafeMonitor
 from services.librarian import SecureLibrarian
 from core.engine import SovereignEngineFSM
+from services.memory_crawler import MemoryCrawler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s")
 logger = logging.getLogger("Matrix.Boot")
@@ -36,8 +37,25 @@ async def boot_matrix():
     vault = AuthVault()
     librarian = SecureLibrarian(bus=bus_client, vault=vault)
     librarian_task = asyncio.create_task(librarian.run())
+
+    # 4. Start the Memory Crawler
+    memory_crawler = MemoryCrawler(bus_url="tcp://127.0.0.1:5555")
+    memory_crawler_task = asyncio.create_task(memory_crawler.start())
     
-    # 4. Engine FSM Setup
+    # 5. Start the Agents (Neo, Trinity, Morpheus)
+    from agents.neo_agent import NeoAgent
+    from agents.trinity_agent import TrinityAgent
+    from agents.morpheus_agent import MorpheusAgent
+    
+    neo = NeoAgent(name="neo", bus_url="tcp://127.0.0.1:5555")
+    trinity = TrinityAgent(name="trinity", bus_url="tcp://127.0.0.1:5555")
+    morpheus = MorpheusAgent(name="morpheus", bus_url="tcp://127.0.0.1:5555")
+    
+    neo_task = asyncio.create_task(neo.start())
+    trinity_task = asyncio.create_task(trinity.start())
+    morpheus_task = asyncio.create_task(morpheus.start())
+    
+    # 6. Engine FSM Setup
     engine = SovereignEngineFSM()
     
     logger.info("ALL CORE SYSTEMS ONLINE. AWAITING COMMANDER.")
@@ -45,7 +63,11 @@ async def boot_matrix():
     # Keep the main loop alive
     await asyncio.gather(
         router_task,
-        librarian_task
+        librarian_task,
+        memory_crawler_task,
+        neo_task,
+        trinity_task,
+        morpheus_task
     )
 
 if __name__ == "__main__":

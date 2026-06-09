@@ -1,7 +1,7 @@
 import enum
 import asyncio
 from typing import Callable, Dict, Any, Optional
-from services.librarian import SkillCrawler
+from services.librarian import SecureLibrarian
 
 class AgentState(enum.Enum):
     IDLE = "IDLE"
@@ -22,15 +22,10 @@ class SovereignEngineFSM:
         }
         self.override_payload: Optional[Dict[str, Any]] = None
         
-        # Initialize SkillCrawler with Dual-Stage Skill Sandboxing per the Commander's directive
-        self.skill_crawler = SkillCrawler(
-            vault_directories=[
-                r"J:\THE_MATRIX\skills\vault",
-                r"J:\antigravity-awesome-skills-main",
-                r"J:\awesome-copilot-main"
-            ],
-            active_directory=r"J:\THE_MATRIX\skills\active"
-        )
+        # The Librarian is now initialized centrally in matrix_main.py
+        from core.neural_bus import NeuralBusClient
+        
+        self.bus_client = NeuralBusClient(identity="Engine_FSM")
 
     def _handle_idle(self, context: Dict[str, Any]):
         print("Engine is IDLE. Waiting for input...")

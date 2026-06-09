@@ -26,6 +26,11 @@ class EventType(str, Enum):
     TOKEN_EXTRACTED = "token_extracted"
     ERROR = "error"
     SOVEREIGN_OVERRIDE = "sovereign_override"
+    USER_COMMAND = "user_command"
+    MEMORY_STORE_REQUEST = "memory_store_request"
+    MEMORY_RECALL_REQUEST = "memory_recall_request"
+    MEMORY_INJECT = "memory_inject"
+    MEMORY_STORED = "memory_stored"
 
 class AgentState(str, Enum):
     """FSM States for agents"""

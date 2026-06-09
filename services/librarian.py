@@ -1,79 +1,98 @@
 import os
+import asyncio
+import aiofiles
 import json
 import logging
-import asyncio
-from typing import Dict, Any
-import aiofiles
+from pathlib import Path
+from typing import List
 
-from core.neural_bus import NeuralBusBroker
-from core.models import EventPayload, EventType
-
-logger = logging.getLogger("Sovereign.Librarian")
+logger = logging.getLogger(__name__)
 
 class SkillCrawler:
-    def __init__(self, target_directory: str, bus: NeuralBusBroker):
-        self.target_dir = os.path.abspath(target_directory)
-        self.bus = bus
-        self.indexed_schema = {}
-        self._running = False
-
-    def _traverse_dir(self, directory: str):
-        results = []
-        for root, _, files in os.walk(directory):
-            for file in files:
-                if file.endswith('.json') or file.endswith('.yaml') or file.endswith('SKILL.md'):
-                    results.append((root, file))
-        return results
-
-    async def crawl_skills(self):
-        logger.info(f"Librarian Crawler initializing index at: {self.target_dir}")
-        if not await asyncio.to_thread(os.path.exists, self.target_dir):
-            logger.error(f"Target directory {self.target_dir} does not exist.")
-            return
-
-        schema = {}
-        file_paths = await asyncio.to_thread(self._traverse_dir, self.target_dir)
+    """
+    Crawler to scan multiple skill directories concurrently, read skills using aiofiles, 
+    and generate lightweight JSON schemas for agents. 
+    Refactored for Sovereign Architecture to avoid blocking the event loop.
+    """
+    def __init__(self, target_directories: List[str] = None, output_file="skills_schema.json"):
+        if target_directories is None:
+            target_directories = [r"J:\antigravity-awesome-skills-main"]
+        # Enforce strict path resolution for Zero-Trust
+        self.target_directories = [Path(d).resolve() for d in target_directories]
+        self.output_file = Path(output_file).resolve()
         
-        for root, file in file_paths:
-            skill_name = os.path.basename(root)
-            if skill_name not in schema:
-                schema[skill_name] = {
-                    "name": skill_name,
-                    "path": root,
-                    "files": [],
-                    "metadata": {}
+    async def read_skill(self, file_path: Path):
+        """Asynchronously reads a skill file and extracts basic metadata."""
+        try:
+            async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+                content = await f.read()
+                return {
+                    "name": file_path.stem,
+                    "file": file_path.name,
+                    "path": str(file_path),
+                    "preview": content[:100].replace('\n', ' ') + "..."
                 }
-            schema[skill_name]["files"].append(file)
+        except Exception as e:
+            logger.error(f"Failed to read skill {file_path}: {e}")
+            return None
+
+    def _get_md_files(self, target_dir: Path) -> List[Path]:
+        """Blocking directory walk function to be run in a separate thread."""
+        md_files = []
+        try:
+            for root, _, files in os.walk(target_dir):
+                for file in files:
+                    if file.endswith('.md'):
+                        md_files.append(Path(root) / file)
+        except Exception as e:
+            logger.error(f"Error walking directory {target_dir}: {e}")
+        return md_files
+
+    async def crawl(self):
+        """Scans the target directories concurrently to build the skill schema."""
+        skills = []
+        tasks = []
+        
+        for target_dir in self.target_directories:
+            if not target_dir.exists() or not target_dir.is_dir():
+                logger.error(f"Target directory {target_dir} does not exist or is not a directory.")
+                continue
+
+            # Run blocking os.walk in a separate thread to prevent event loop blocking
+            files_to_read = await asyncio.to_thread(self._get_md_files, target_dir)
             
-            # Use true asynchronous file I/O
-            full_path = os.path.join(root, file)
-            try:
-                async with aiofiles.open(full_path, mode='r', encoding='utf-8') as f:
-                    content = await f.read()
-                    schema[skill_name]["metadata"][file] = f"Size: {len(content)} chars"
-            except Exception as e:
-                logger.error(f"Failed to read {full_path}: {e}")
+            for file_path in files_to_read:
+                tasks.append(self.read_skill(file_path))
+                    
+        if tasks:
+            # Execute all reads concurrently
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.error(f"Exception during skill reading: {res}")
+                elif res is not None:
+                    skills.append(res)
+                
+        # Generate JSON schema payload
+        schema = {
+            "version": "1.0",
+            "skills_count": len(skills),
+            "skills": skills
+        }
+        
+        # Save schema asynchronously
+        try:
+            async with aiofiles.open(self.output_file, mode='w', encoding='utf-8') as f:
+                await f.write(json.dumps(schema, indent=2))
+            logger.info(f"Crawled {len(skills)} skills and saved to {self.output_file}")
+        except Exception as e:
+            logger.error(f"Failed to save schema to {self.output_file}: {e}")
+            
+        return schema
 
-        self.indexed_schema = schema
-        logger.info(f"Librarian Crawler finished indexing. Secured {len(self.indexed_schema)} skills.")
-
-    async def inject_skills(self, target_identity: bytes):
-        """Broadcasts or sends SKILL_INJECT to a specific agent."""
-        payload = EventPayload(
-            event_type=EventType.SKILL_INJECT,
-            source_agent_id="librarian",
-            correlation_id="librarian_inject",
-            payload={"schema": self.indexed_schema}
-        )
-        logger.info(f"Injecting skills to {target_identity}")
-        await self.bus.send(target_identity, payload)
-
-    async def handle_skill_request(self, identity: bytes, event: EventPayload):
-        """Handler for when an agent asks for skills."""
-        logger.info(f"Received skill request from {event.source_agent_id}")
-        await self.inject_skills(identity)
-
-    def register_hooks(self):
-        # We assume the event type for requesting skills is STATE_UPDATE or a specific request.
-        # But we'll just bind a generic "request_skills" logic if needed.
-        pass
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    directories = [r"J:\antigravity-awesome-skills-main", r"J:\awesome-copilot-main"]
+    crawler = SkillCrawler(target_directories=directories)
+    asyncio.run(crawler.crawl())

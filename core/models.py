@@ -47,7 +47,7 @@ class EventPayload(BaseModel):
 class TaskDefinition(BaseModel):
     """Task structure for agent execution"""
     task_id: str
-    agent_type: str  # intel, forge, shield, aegis
+    agent_type: str  # neo, morpheus, smith, trinity, oracle
     instructions: str
     input_data: Dict[str, Any]
     priority: int = 5

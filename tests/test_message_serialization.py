@@ -1,14 +1,14 @@
 import json
 import sys
 sys.path.append(r"J:\THE_MATRIX")
-from datetime import datetime
+from datetime import datetime, timezone
 from core.models import EventPayload, EventType
 
 def test_event_payload_serialization():
     # 1. Create a dummy payload
     payload = EventPayload(
         event_type=EventType.USER_COMMAND,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         source_agent_id="test-source",
         correlation_id="corr-123",
         payload={"message": "hello test", "target_agent": "neo"}

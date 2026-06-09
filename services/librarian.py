@@ -8,13 +8,13 @@ class SecureLibrarian:
     Sovereign Librarian. No blind injection!
     Responds to explicit Token Requests via secure channels.
     """
-    def __init__(self, bus: NeuralBusClient, vault: AuthVault):
+    def __init__(self, bus: NeuralBusClient, vault: AuthVault, port: int = 5557):
         self.bus = bus
         self.vault = vault
         
         self.context = self.bus.context
         self.router_socket = self.context.socket(import_zmq().ROUTER)
-        self.router_socket.bind("tcp://127.0.0.1:5557")
+        self.router_socket.bind(f"tcp://127.0.0.1:{port}")
 
     async def handle_token_requests(self):
         """Secure JIT token provisioning using strict REQ/REP over ZMQ."""

@@ -1,10 +1,10 @@
-﻿import os
+import os
 import json
 import secrets
 import logging
 import hmac
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from cryptography.fernet import Fernet
 
@@ -16,7 +16,7 @@ class SecretToken:
     def __init__(self, scope: str, secret_data: str, ttl_minutes: int = 15):
         self.token_id = secrets.token_urlsafe(32)
         self.scope = scope
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
         self.expires_at = self.created_at + timedelta(minutes=ttl_minutes)
         self.is_expired = False
         
@@ -26,7 +26,7 @@ class SecretToken:
         self._encrypted_payload = cipher.encrypt(secret_data.encode("utf-8"))
     
     def is_valid(self) -> bool:
-        return datetime.utcnow() < self.expires_at and not self.is_expired
+        return datetime.now(timezone.utc) < self.expires_at and not self.is_expired
     
     def reveal(self) -> str:
         if not self.is_valid():

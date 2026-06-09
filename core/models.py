@@ -2,10 +2,10 @@
 # Pydantic Models for Message Types & State
 # ==============================================================================
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Any, Optional, Dict, List, Union
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 SafeValue = Union[str, int, float, bool, None, list, dict]
 
@@ -44,14 +44,13 @@ class AgentState(str, Enum):
 class EventPayload(BaseModel):
     """Base event structure for ZMQ neural bus"""
     event_type: EventType
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source_agent_id: str
     correlation_id: str
     payload: Dict[str, SafeValue]
     metadata: Optional[Dict[str, str]] = None
     
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 class TaskDefinition(BaseModel):
     """Task structure for agent execution"""

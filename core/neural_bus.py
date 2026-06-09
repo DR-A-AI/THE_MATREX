@@ -119,6 +119,8 @@ class NeuralBusRouter:
         self._running = False
         
     async def start(self):
+        # Enable address reuse to allow fast restart after crashes
+        self.socket.setsockopt(zmq.LINGER, 0)
         self.socket.bind(self.endpoint)
         self._running = True
         logger.info(f"Sovereign NeuralBus Router started at {self.endpoint}")

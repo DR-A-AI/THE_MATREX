@@ -14,6 +14,8 @@ class SecureLibrarian:
         
         self.context = self.bus.context
         self.router_socket = self.context.socket(import_zmq().ROUTER)
+        # Enable linger and address reuse for fast restart
+        self.router_socket.setsockopt(import_zmq().LINGER, 0)
         self.router_socket.bind(f"tcp://127.0.0.1:{port}")
 
     async def handle_token_requests(self):

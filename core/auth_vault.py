@@ -1,128 +1,80 @@
-import os
-import ujson
+﻿import os
+import json
 import secrets
 import logging
-import asyncio
-import aiofiles
+import hmac
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
+from cryptography.fernet import Fernet
 
 logger = logging.getLogger("Sovereign.AuthVault")
 
 class SecretToken:
-    """Short-lived ephemeral token for zero-trust secret access."""
-    __slots__ = ['token_id', 'scope', 'resource_path', 'created_at', 'expires_at', 'is_expired']
+    """Ephemeral, strongly encrypted token for strict Zero-Trust access."""
     
-    def __init__(self, scope: str, resource_path: str, ttl_minutes: int = 15):
+    def __init__(self, scope: str, secret_data: str, ttl_minutes: int = 15):
         self.token_id = secrets.token_urlsafe(32)
         self.scope = scope
-        self.resource_path = resource_path
         self.created_at = datetime.utcnow()
         self.expires_at = self.created_at + timedelta(minutes=ttl_minutes)
         self.is_expired = False
+        
+        # Encrypt the secret in memory
+        self._encryption_key = Fernet.generate_key()
+        cipher = Fernet(self._encryption_key)
+        self._encrypted_payload = cipher.encrypt(secret_data.encode("utf-8"))
     
     def is_valid(self) -> bool:
         return datetime.utcnow() < self.expires_at and not self.is_expired
     
+    def reveal(self) -> str:
+        if not self.is_valid():
+            raise PermissionError("Token expired or revoked.")
+        cipher = Fernet(self._encryption_key)
+        decrypted = cipher.decrypt(self._encrypted_payload).decode("utf-8")
+        self.invalidate() # Single-use strictly enforced
+        return decrypted
+
     def invalidate(self):
         self.is_expired = True
+        # Cryptographic wipe of the key
+        self._encryption_key = secrets.token_bytes(32)
+        self._encrypted_payload = secrets.token_bytes(64)
 
 class AuthVault:
-    """Zero-Trust Secret Management with async non-blocking I/O and strict garbage collection."""
+    """Zero-Trust In-Memory Secret Management."""
     
-    def __init__(self, secret_path: str = "J:\\THE_MATRIX\\secrets"):
-        self.secret_path = os.path.abspath(secret_path)
+    def __init__(self):
         self.active_tokens: Dict[str, SecretToken] = {}
-        self.scope_map = self._build_scope_map()
-        self._gc_task = asyncio.create_task(self._background_gc())
         logger.info("Sovereign Zero-Trust Auth Vault initialized.")
     
-    def _build_scope_map(self) -> Dict[str, str]:
-        \"\"\"Map predefined scopes to their secure, normalized secret paths.\"\"\"
-        return {
-            "gcp_p12": os.path.normpath(os.path.join(self.secret_path, "theai-world-ff9cafd706c1.p12")),
-            "firebase_admin": os.path.normpath(os.path.join(self.secret_path, "theai-world-firebase-adminsdk-fbsvc-d96be6f9b6.json")),
-            "gcp_client_secret": os.path.normpath(os.path.join(self.secret_path, "client_secret_759852947193-9upqqb6ljgh22oi45lqrcp9i3814nrsc.apps.googleusercontent.com.json")),
-            "gcp_text": os.path.normpath(os.path.join(self.secret_path, "Google Cloud  G SuitGoogle Cloud  G.txt")),
-            "gcp_service_account": os.path.normpath(os.path.join(self.secret_path, "theai-world-443058ed6fa2.json"))
-        }
-    
-    def request_token(self, agent_type: str, scope: str, ttl_minutes: int = 5) -> SecretToken:
-        """Issue a strictly short-lived secret token. Only Trinity (Vault) and Neo (Orchestrator) hold the keys."""
-        if agent_type not in ["trinity", "neo"]:
-            logger.critical(f"CRITICAL Security Halt: Unauthorized agent '{agent_type}' attempted to access Sovereign Secrets.")
-            raise PermissionError(f"CRITICAL Security Halt: Unauthorized agent '{agent_type}'. Only Trinity and Neo are permitted.")
-            
-        if scope not in self.scope_map:
-            logger.critical(f"Security Halt: Access denied to unmapped scope: {scope}")
-            raise ValueError(f"Invalid scope: {scope}")
-        
-        token = SecretToken(
-            scope=scope,
-            resource_path=self.scope_map[scope],
-            ttl_minutes=ttl_minutes
-        )
+    def issue_token(self, scope: str, secret_data: str, ttl_minutes: int = 5) -> str:
+        """Issue an ephemeral in-memory encrypted token, return the token_id."""
+        token = SecretToken(scope=scope, secret_data=secret_data, ttl_minutes=ttl_minutes)
         self.active_tokens[token.token_id] = token
-        logger.info(f"Issued ephemeral token for scope: {scope} to agent: {agent_type} (TTL: {ttl_minutes}m)")
-        return token
+        logger.info(f"Issued single-use ephemeral token for scope: {scope}")
+        return token.token_id
     
-    async def load_secret(self, token: SecretToken) -> Any:
-        """Load secret asynchronously to prevent event loop blocking, then GC token."""
-        if not token.is_valid():
-            logger.critical(f"Security Halt: Unauthorized attempt with expired token: {token.token_id}")
-            raise PermissionError("Token expired or revoked.")
+    def consume_token(self, token_id: str) -> Optional[str]:
+        """Consume a token securely. Purges after use."""
+        token = self.active_tokens.get(token_id)
+        if not token:
+            logger.warning(f"Security Alert: Invalid or unknown token attempted: {token_id}")
+            raise PermissionError("Token invalid.")
         
-        # Security: Prevent path traversal by strictly matching with scope_map
-        expected_path = self.scope_map.get(token.scope)
-        if expected_path != token.resource_path or not token.resource_path.startswith(self.secret_path):
-            logger.critical("Security Halt: Path traversal attempt detected.")
-            raise PermissionError("Path violation detected.")
-            
-        try:
-            if token.resource_path.endswith('.p12'):
-                async with aiofiles.open(token.resource_path, 'rb') as f:
-                    secret = await f.read()
-            elif token.resource_path.endswith('.txt'):
-                async with aiofiles.open(token.resource_path, 'r', encoding='utf-8') as f:
-                    secret = await f.read()
-            elif token.resource_path.endswith('.json'):
-                async with aiofiles.open(token.resource_path, 'r', encoding='utf-8') as f:
-                    content = await f.read()
-                    secret = ujson.loads(content)
-            else:
-                logger.error(f"Critical Error: Unsupported file format for path: {token.resource_path}")
-                return None
-            
-            token.invalidate()
-            self._garbage_collect()
-            logger.info("Secret loaded securely; token instantly obliterated.")
-            return secret
-        except FileNotFoundError:
-            logger.error(f"Critical Error: Secret file missing for path: {token.resource_path}")
-            return None
-        except Exception as e:
-            logger.error(f"Error loading secret: {e}")
-            return None
-
+        secret = token.reveal()
+        del self.active_tokens[token_id]
+        self._garbage_collect()
+        return secret
+        
     def _garbage_collect(self):
-        """Synchronous manual garbage collection hook."""
+        """Purge invalid tokens from memory. Sovereign Razor compliance."""
         expired = [tid for tid, token in self.active_tokens.items() if not token.is_valid()]
         for tid in expired:
+            self.active_tokens[tid].invalidate()
             del self.active_tokens[tid]
+            
         if expired:
             logger.debug(f"Garbage collected {len(expired)} dead tokens.")
 
-    async def _background_gc(self):
-        """Continuous background garbage collection."""
-        while True:
-            await asyncio.sleep(60)
-            self._garbage_collect()
-
-    async def close(self):
-        """Cleanup resources."""
-        if self._gc_task:
-            self._gc_task.cancel()
-            try:
-                await self._gc_task
-            except asyncio.CancelledError:
-                pass

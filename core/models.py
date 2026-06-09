@@ -22,6 +22,8 @@ class EventType(str, Enum):
     STATE_UPDATE = "state_update"
     SKILL_INJECT = "skill_inject"
     SKILL_REQUEST = "skill_request"
+    KEY_INJECT = "key_inject"
+    TOKEN_EXTRACTED = "token_extracted"
     ERROR = "error"
     SOVEREIGN_OVERRIDE = "sovereign_override"
 

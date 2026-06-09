@@ -21,6 +21,19 @@ class FailsafeMonitor:
             "start_time": time.time()
         }
 
+    async def attach_to_bus(self, client):
+        """Attaches the monitor to the Neural Bus to autonomously track stability."""
+        from core.models import EventType
+        client.register_handler(EventType.ERROR.value, self._handle_bus_error)
+        client.register_handler(EventType.TASK_FAILED.value, self._handle_bus_error)
+        logger.info("[Failsafe] Autonomous Error Monitoring Engaged on Neural Bus.")
+
+    async def _handle_bus_error(self, event):
+        """Mathematically track errors without seeing the payload details."""
+        self.record_event(is_error=True)
+        score = self.calculate_stability_score()
+        logger.warning(f"[Failsafe] 🚨 ERROR DETECTED! Stability Score dropped to: {score:.1f}%")
+
     def record_event(self, is_error: bool = False):
         """Mathematically track events without seeing the payload"""
         self.metrics["total_events"] += 1

@@ -18,6 +18,12 @@ This document confirms that **The Sovereign Matrix** has reached **production re
 
 ---
 
+## 🚨 Security Notice - CRITICAL
+
+**Credentials Management**: All secret files (Firebase, Google OAuth, Azure identity) have been **removed from Git** but are retained locally in `/secrets` directory for development use. See **[SECURITY_VAULT.md](./SECURITY_VAULT.md)** for safe handling practices.
+
+---
+
 ## 🚀 Production Readiness Checklist
 
 | Component | Status | Details |
@@ -25,7 +31,7 @@ This document confirms that **The Sovereign Matrix** has reached **production re
 | **Unit Tests** | ✅ PASS | 7/7 tests passing, zero failures |
 | **Integration Tests** | ✅ PASS | Message serialization, authority validation, memory operations |
 | **Code Quality** | ✅ PASS | Pydantic v2 migration complete, all datetime deprecations fixed |
-| **Security Audit** | ✅ PASS | Bandit linting configured, API key isolation in .env |
+| **Security Audit** | ✅ PASS | Bandit linting configured, API key isolation in .env, secrets removed from Git |
 | **ZMQ Stability** | ✅ PASS | Windows Selector Loop configured, async event handling verified |
 | **CI/CD Pipeline** | ✅ ACTIVE | GitHub Actions workflow (.github/workflows/production_ci.yml) |
 | **Dependencies** | ✅ LOCKED | requirements.txt documented with version constraints |

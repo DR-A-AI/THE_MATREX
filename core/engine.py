@@ -22,12 +22,14 @@ class SovereignEngineFSM:
         }
         self.override_payload: Optional[Dict[str, Any]] = None
         
-        # Initialize SkillCrawler with both directories per the Commander's directive
+        # Initialize SkillCrawler with Dual-Stage Skill Sandboxing per the Commander's directive
         self.skill_crawler = SkillCrawler(
-            target_directories=[
+            vault_directories=[
+                r"J:\THE_MATRIX\skills\vault",
                 r"J:\antigravity-awesome-skills-main",
                 r"J:\awesome-copilot-main"
-            ]
+            ],
+            active_directory=r"J:\THE_MATRIX\skills\active"
         )
 
     def _handle_idle(self, context: Dict[str, Any]):

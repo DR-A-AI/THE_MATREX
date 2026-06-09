@@ -30,7 +30,7 @@ class SecretToken:
 class AuthVault:
     """Zero-Trust Secret Management with async non-blocking I/O and strict garbage collection."""
     
-    def __init__(self, secret_path: str = "C:/Users/ai/AI_Lab/secrets"):
+    def __init__(self, secret_path: str = "J:\\مجلد الاسرار\\1"):
         self.secret_path = os.path.abspath(secret_path)
         self.active_tokens: Dict[str, SecretToken] = {}
         self.scope_map = self._build_scope_map()
@@ -40,9 +40,11 @@ class AuthVault:
     def _build_scope_map(self) -> Dict[str, str]:
         """Map predefined scopes to their secure, normalized secret paths."""
         return {
-            "openai": os.path.normpath(os.path.join(self.secret_path, "openai.json")),
-            "github": os.path.normpath(os.path.join(self.secret_path, "github.json")),
-            "system_root": os.path.normpath(os.path.join(self.secret_path, "system_root.json"))
+            "gcp_p12": "J:\\مجلد الاسرار\\1\\theai-world-ff9cafd706c1.p12",
+            "firebase_admin": "J:\\مجلد الاسرار\\1\\theai-world-firebase-adminsdk-fbsvc-d96be6f9b6.json",
+            "gcp_client_secret": "J:\\مجلد الاسرار\\1\\client_secret_759852947193-9upqqb6ljgh22oi45lqrcp9i3814nrsc.apps.googleusercontent.com.json",
+            "gcp_text": "J:\\مجلد الاسرار\\1\\Google Cloud  G SuitGoogle Cloud  G.txt",
+            "gcp_service_account": "J:\\مجلد الاسرار\\1\\theai-world-443058ed6fa2.json"
         }
     
     def request_token(self, scope: str, ttl_minutes: int = 5) -> SecretToken:
@@ -60,7 +62,7 @@ class AuthVault:
         logger.info(f"Issued ephemeral token for scope: {scope} (TTL: {ttl_minutes}m)")
         return token
     
-    async def load_secret(self, token: SecretToken) -> Optional[Dict[str, Any]]:
+    async def load_secret(self, token: SecretToken) -> Any:
         """Load secret asynchronously to prevent event loop blocking, then GC token."""
         if not token.is_valid():
             logger.critical(f"Security Halt: Unauthorized attempt with expired token: {token.token_id}")
@@ -73,10 +75,19 @@ class AuthVault:
             raise PermissionError("Path violation detected.")
             
         try:
-            async with aiofiles.open(token.resource_path, 'r') as f:
-                content = await f.read()
-                # Fast JSON parsing
-                secret = ujson.loads(content)
+            if token.resource_path.endswith('.p12'):
+                async with aiofiles.open(token.resource_path, 'rb') as f:
+                    secret = await f.read()
+            elif token.resource_path.endswith('.txt'):
+                async with aiofiles.open(token.resource_path, 'r', encoding='utf-8') as f:
+                    secret = await f.read()
+            elif token.resource_path.endswith('.json'):
+                async with aiofiles.open(token.resource_path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                    secret = ujson.loads(content)
+            else:
+                logger.error(f"Critical Error: Unsupported file format for path: {token.resource_path}")
+                return None
             
             token.invalidate()
             self._garbage_collect()

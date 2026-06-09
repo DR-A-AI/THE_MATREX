@@ -10,20 +10,33 @@ echo          ///  SOVEREIGN MATRIX BOOT SEQUENCE INITIATED  ///
 echo ======================================================================
 echo.
 
-echo [1/3] Powering up Holographic Dashboard (Vite Server)...
+REM Kill any existing processes on port 5173 (Vite) to avoid conflicts
+echo [PRE-BOOT] Cleaning up port 5173 (Vite)...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+timeout /t 1 /nobreak >nul
+
+echo [1/3] Powering up Holographic Dashboard (Vite Server on port 5173)...
 cd dashboard
-start /B cmd /c "npm run dev"
+start "Sovereign Dashboard" cmd /k "npm run dev"
 cd ..
-timeout /t 3 /nobreak >nul
+timeout /t 5 /nobreak >nul
 
 echo [2/3] Igniting MCP Gateway (GitHub, Puppeteer, UI Nodes)...
-start /B cmd /c "python services\mcp_gateway.py"
+start "Sovereign MCP Gateway" cmd /k "python services\mcp_gateway.py"
 timeout /t 2 /nobreak >nul
 
 echo [3/3] Booting Core Engine (Neural Bus, Watchdog, Librarian)...
 echo.
 echo ======================================================================
 echo THE MATRIX IS ONLINE. AWAITING COMMANDER'S ORDERS.
+echo ======================================================================
+echo.
+echo 🌐 DASHBOARD: http://127.0.0.1:5173
+echo 🔌 UI BRIDGE: http://127.0.0.1:8000
+echo 🧠 NEURAL BUS: tcp://127.0.0.1:5555
+echo.
 echo ======================================================================
 echo.
 

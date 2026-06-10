@@ -19,9 +19,9 @@ class APIKeyRouter:
         from dotenv import load_dotenv
         load_dotenv(os.path.join(r"J:\THE_MATRIX", ".env"))
         
-        # Discover all keys that end with _API_KEY and start with 'AIza'
+        # Discover all keys that look like Google API keys
         for k, v in os.environ.items():
-            if k.endswith("_API_KEY") and v and v.startswith("AIza"):
+            if ("API_KEY" in k or "POOL_KEY" in k) and v and v.startswith("AIza"):
                 if v not in cls._keys:
                     cls._keys.append(v)
                     
@@ -47,16 +47,30 @@ class APIKeyRouter:
         # Try to find a healthy key
         for _ in range(len(cls._keys)):
             key = cls._keys[cls._current_index]
+            key_index = cls._current_index + 1
             cls._current_index = (cls._current_index + 1) % len(cls._keys)
             
             if key not in cls._exhausted_keys:
+                cls._log_telemetry(f"SUCCESS: Assigned Key #{key_index} for request.")
                 return key
                 
         # If all keys are exhausted, return the next one anyway and hope for the best
         logger.warning("ALL API KEYS EXHAUSTED! Falling back to the next key.")
         key = cls._keys[cls._current_index]
+        key_index = cls._current_index + 1
         cls._current_index = (cls._current_index + 1) % len(cls._keys)
+        cls._log_telemetry(f"WARNING: Forced to use exhausted Key #{key_index}.")
         return key
+        
+    @classmethod
+    def _log_telemetry(cls, msg: str):
+        """Writes live telemetry to monitor consumption."""
+        try:
+            with open(os.path.join(r"J:\THE_MATRIX", "request_monitor.log"), "a", encoding="utf-8") as f:
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{timestamp}] {msg}\n")
+        except Exception:
+            pass
         
     @classmethod
     def report_exhausted(cls, key: str):
@@ -64,3 +78,4 @@ class APIKeyRouter:
         if key:
             cls._exhausted_keys[key] = time.time()
             logger.warning(f"API Key marked as EXHAUSTED (Rate Limited). Cooldown: 60s.")
+            cls._log_telemetry(f"ERROR: Key Exhausted (Rate Limit Hit). Added to cooldown list.")

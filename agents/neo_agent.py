@@ -114,6 +114,26 @@ class NeoAgent(MatrixAgent):
         if "store permanent:" in message.lower() or "خزن دائمة:" in message or "recall:" in message.lower() or "تذكر:" in message.lower() or "ابحث:" in message:
             await super()._handle_user_command(event)
             return
+            
+        if message.strip() == "/clear":
+            self.chat_history = []
+            reply = EventPayload(
+                event_type=EventType.STATE_UPDATE,
+                source_agent_id=self.name,
+                correlation_id=event.correlation_id,
+                payload={"message": "Conversation history cleared from memory."}
+            )
+            await self.client.send(reply)
+            return
+
+        # Send initial thinking status
+        initial_status = EventPayload(
+            event_type=EventType.STATE_UPDATE,
+            source_agent_id=self.name,
+            correlation_id=event.correlation_id,
+            payload={"status_action": "Thinking..."}
+        )
+        await self.client.send(initial_status)
 
         from core.key_router import APIKeyRouter
         gemini_key = APIKeyRouter.get_key()
@@ -307,11 +327,14 @@ class NeoAgent(MatrixAgent):
                 async def generate_with_retry():
                     nonlocal client, gemini_key
                     delay = 2.0
-                    max_retries = 5
+                    max_retries = 40 # Try up to 40 different keys before giving up
                     for attempt in range(max_retries):
                         try:
                             def run_gen():
-                                return client.models.generate_content(
+                                # The client needs to be re-instantiated if we changed gemini_key!
+                                # Since we only initialized client outside the loop, changing gemini_key doesn't affect `client` unless we recreate it!
+                                local_client = genai.Client(api_key=gemini_key)
+                                return local_client.models.generate_content(
                                     model="gemini-2.5-flash-lite",
                                     contents=history,
                                     config=config
@@ -319,38 +342,31 @@ class NeoAgent(MatrixAgent):
                             return await asyncio.to_thread(run_gen)
                         except Exception as e:
                             err_str = str(e)
-                            is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA", "API_KEY_INVALID", "API KEY NOT VALID", "400"])
+                            is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA", "API_KEY_INVALID", "API KEY NOT VALID", "400", "503"])
                             if is_rate_limit:
                                 from core.key_router import APIKeyRouter
                                 APIKeyRouter.report_exhausted(gemini_key)
                                 
                             if is_rate_limit and attempt < max_retries - 1:
-                                retry_wait = None
-                                match = re.search(r"retryDelay':\s*'(\d+)(?:\.\d+)?s'", err_str)
-                                if not match:
-                                    match = re.search(r'retryDelay":\s*"(\d+)(?:\.\d+)?s"', err_str)
-                                if not match:
-                                    match = re.search(r"retry\s+(?:in|after)\s+(\d+)(?:\.\d+)?s", err_str, re.IGNORECASE)
-                                
-                                if match:
-                                    try:
-                                        retry_wait = float(match.group(1)) + 1.0
-                                    except ValueError:
-                                        pass
-                                
-                                if retry_wait is None:
-                                    retry_wait = delay * (1.5 ** attempt) + random.uniform(0.5, 1.5)
-                                
-                                logger.warning(f"[{self.name}] Rate limit hit. Rotating key and retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}).")
-                                await asyncio.sleep(retry_wait)
-                                
-                                # Fetch a new key for the next retry
                                 new_key = APIKeyRouter.get_key()
-                                if new_key:
+                                if new_key and new_key != gemini_key:
                                     gemini_key = new_key
-                                    client = genai.Client(api_key=gemini_key)
-                            else:
-                                raise
+                                
+                                # Notify UI of key rotation
+                                status_update = EventPayload(
+                                    event_type=EventType.STATE_UPDATE,
+                                    source_agent_id=self.name,
+                                    correlation_id=event.correlation_id,
+                                    payload={"status_action": f"Rate Limit Hit. Rotating Key ({attempt+1}/{max_retries})..."}
+                                )
+                                await self.client.send(status_update)
+                                
+                                # Do NOT wait 60 seconds if we are switching keys. Just brief pause.
+                                await asyncio.sleep(1.0)
+                                continue
+                                
+                            # If we reach here, it means we exhausted retries or it's a non-rate-limit error
+                            raise e
                                 
                 response = await generate_with_retry()
                 

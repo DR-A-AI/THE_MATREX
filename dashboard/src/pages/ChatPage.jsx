@@ -9,9 +9,17 @@ const agents = [
   { id: 'critic', name: 'Dictatorial Critic', status: 'online' }
 ];
 
-let globalMessages = [
-  { id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }
-];
+// Helper to parse safely
+const getInitialMessages = () => {
+  try {
+    const saved = localStorage.getItem('matrixMessages');
+    return saved ? JSON.parse(saved) : [{ id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }];
+  } catch(e) {
+    return [{ id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }];
+  }
+};
+
+let globalMessages = getInitialMessages();
 let globalStatuses = {};
 
 export default function ChatPage() {
@@ -39,6 +47,7 @@ export default function ChatPage() {
          setMessages(prev => {
              const next = [...prev, { id: Date.now(), sender: data.sender, text: data.text }];
              globalMessages = next;
+             localStorage.setItem('matrixMessages', JSON.stringify(next));
              return next;
          });
          setAgentStatuses(prev => {
@@ -61,6 +70,7 @@ export default function ChatPage() {
     setMessages(prev => {
         const next = [...prev, { id: Date.now(), sender: 'user', text: message }];
         globalMessages = next;
+        localStorage.setItem('matrixMessages', JSON.stringify(next));
         return next;
     });
     
@@ -117,11 +127,27 @@ export default function ChatPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 glass-panel flex flex-col relative">
-        <div className="p-4 border-b border-[rgba(0,243,255,0.3)]">
-          <h3 className="text-2xl font-bold hologram-text">
-            {agents.find(a => a.id === activeAgent)?.name}
-          </h3>
-          <p className="text-xs text-[#00f3ff] opacity-70">Encrypted ZMQ Channel Active</p>
+        <div className="p-4 border-b border-[rgba(0,243,255,0.3)] flex justify-between items-center">
+          <div>
+            <h3 className="text-2xl font-bold hologram-text">
+              {agents.find(a => a.id === activeAgent)?.name}
+            </h3>
+            <p className="text-xs text-[#00f3ff] opacity-70">Encrypted ZMQ Channel Active</p>
+          </div>
+          <button 
+            onClick={() => {
+              const initMsg = [{ id: Date.now(), sender: 'system', text: 'Conversation cleared. Awaiting new command.' }];
+              setMessages(initMsg);
+              globalMessages = initMsg;
+              localStorage.setItem('matrixMessages', JSON.stringify(initMsg));
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ agent: activeAgent, text: '/clear' }));
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded border border-[#00f3ff]/50 text-[#00f3ff] hover:bg-[#00f3ff]/20 text-sm transition-all"
+          >
+            New Chat
+          </button>
         </div>
 
         {/* Chat History */}
@@ -131,6 +157,15 @@ export default function ChatPage() {
               <p className="text-sm">{msg.text}</p>
             </div>
           ))}
+          {agentStatuses[activeAgent.toLowerCase()] && (
+            <div className="self-start w-full bg-[rgba(2,10,23,0.9)] border border-[#00f3ff]/50 rounded-lg p-4 mt-2 animate-pulse shadow-[0_0_15px_rgba(0,243,255,0.2)]">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-2 h-2 rounded-full bg-[#00f3ff] shadow-[0_0_8px_#00f3ff]" />
+                <span className="text-[#00f3ff] font-bold text-sm tracking-wider uppercase">{activeAgent} IS WORKING...</span>
+              </div>
+              <p className="text-[#00f3ff] text-sm font-mono">&gt; {agentStatuses[activeAgent.toLowerCase()]}</p>
+            </div>
+          )}
         </div>
 
         {/* Input Area */}

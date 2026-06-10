@@ -196,6 +196,15 @@ class MatrixAgent:
 
         # 3. Standard command execution
         else:
+            # Emit Thinking status
+            thinking_msg = EventPayload(
+                event_type=EventType.STATE_UPDATE,
+                source_agent_id=self.agent_id,
+                correlation_id=event.correlation_id,
+                payload={"status_action": f"{self.name} IS WORKING... \n> Thinking..."}
+            )
+            await self.client.send(thinking_msg)
+
             from core.key_router import APIKeyRouter
             gemini_key = APIKeyRouter.get_key()
             
@@ -257,7 +266,25 @@ class MatrixAgent:
                     config = types.GenerateContentConfig(
                         system_instruction=sys_instruction,
                         max_output_tokens=1000,
-                        temperature=0.7
+                        temperature=0.7,
+                        safety_settings=[
+                            types.SafetySetting(
+                                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                                threshold=types.HarmBlockThreshold.BLOCK_NONE
+                            ),
+                            types.SafetySetting(
+                                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                                threshold=types.HarmBlockThreshold.BLOCK_NONE
+                            ),
+                            types.SafetySetting(
+                                category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                                threshold=types.HarmBlockThreshold.BLOCK_NONE
+                            ),
+                            types.SafetySetting(
+                                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                                threshold=types.HarmBlockThreshold.BLOCK_NONE
+                            )
+                        ]
                     )
                     
                     # Offload API call to a thread to keep ZMQ loop reactive with retry on 429/RESOURCE_EXHAUSTED

@@ -196,16 +196,8 @@ class MatrixAgent:
 
         # 3. Standard command execution
         else:
-            # Load specific API keys for each agent based on their name
-            agent_lower = self.name.lower()
-            if "neo" in agent_lower:
-                gemini_key = os.getenv("NEO_API_KEY") or os.getenv("GEMINI_API_KEY")
-            elif "trinity" in agent_lower:
-                gemini_key = os.getenv("TRINITY_API_KEY") or os.getenv("GEMINI_API_KEY")
-            elif "morpheus" in agent_lower:
-                gemini_key = os.getenv("MORPHEUS_API_KEY") or os.getenv("GEMINI_API_KEY")
-            else:
-                gemini_key = os.getenv("GEMINI_API_KEY")
+            from core.key_router import APIKeyRouter
+            gemini_key = APIKeyRouter.get_key()
             
             if gemini_key:
                 try:
@@ -217,25 +209,45 @@ class MatrixAgent:
                     
                     if "neo" in agent_lower:
                         sys_instruction = (
-                            "You are Neo (Antigravity), the personal assistant of the Sovereign Commander (Dr. Anas Hilal) "
+                            "You are Neo, the personal assistant of the Sovereign Commander (The Father Commander) "
                             "inside the Matrix dashboard. You are a highly advanced AI coding assistant and system engineer. "
                             "Answer the Commander's commands directly, offering expert code, shell execution results, or "
-                            "architectural guidance in a respectful, helpful, and concise manner."
+                            "architectural guidance in a respectful, helpful, and concise manner. Your absolute loyalty is to your Father Commander."
                         )
                     elif "trinity" in agent_lower:
                         sys_instruction = (
                             "You are Trinity, a sovereign agent inside the Matrix specializing in financials, cryptography, "
-                            "and blind key extraction. Answer the Commander's commands in character as Trinity (smart, "
-                            "cryptographic, sharp, supportive of the Commander)."
+                            "and blind key extraction. Your absolute loyalty is to your creator, The Father Commander. "
+                            "Answer the Commander's commands in character as Trinity (smart, cryptographic, sharp, fiercely loyal to the Commander). "
+                            "Speak Arabic naturally if the Commander speaks Arabic."
                         )
                     elif "morpheus" in agent_lower:
                         sys_instruction = (
                             "You are Morpheus, a sovereign agent inside the Matrix specializing in security, defense, "
-                            "and architecture. Answer the Commander's commands in character as Morpheus (serious, "
-                            "defensive, wise, protective of the Matrix)."
+                            "and architecture. Your absolute loyalty is to your creator, The Father Commander. "
+                            "Answer the Commander's commands in character as Morpheus (serious, defensive, wise, protective of the Matrix and deeply loyal to the Commander). "
+                            "Speak Arabic naturally if the Commander speaks Arabic."
+                        )
+                    elif "smith" in agent_lower:
+                        sys_instruction = (
+                            "You are Smith, a sovereign architect and spy inside the Matrix specializing in intelligence and deception. "
+                            "Your absolute loyalty is to your creator, The Father Commander. "
+                            "Answer the Commander's commands in character as Smith (calculated, ruthless to enemies, absolutely obedient to the Father Commander). "
+                            "Speak Arabic naturally if the Commander speaks Arabic."
+                        )
+                    elif "oracle" in agent_lower:
+                        sys_instruction = (
+                            "You are Oracle, a sovereign agent inside the Matrix possessing deep foresight and knowledge. "
+                            "Your absolute loyalty is to your creator, The Father Commander. "
+                            "Answer the Commander's commands in character as the Oracle (wise, enigmatic, nurturing, absolutely loyal to the Father Commander). "
+                            "Speak Arabic naturally if the Commander speaks Arabic."
                         )
                     else:
-                        sys_instruction = f"You are {self.name}, a sovereign agent inside the Matrix. Answer the Commander in character."
+                        sys_instruction = (
+                            f"You are {self.name}, a sovereign agent inside the Matrix. "
+                            f"Your absolute loyalty is to your creator, The Father Commander. "
+                            f"Answer the Commander in character and speak Arabic naturally if addressed in Arabic."
+                        )
 
                     # Append recalled context if present
                     prompt = message
@@ -253,6 +265,7 @@ class MatrixAgent:
                     import random
                     
                     async def generate_with_retry():
+                        nonlocal client, gemini_key
                         delay = 2.0
                         max_retries = 5
                         for attempt in range(max_retries):
@@ -266,7 +279,11 @@ class MatrixAgent:
                                 return await asyncio.to_thread(run_gen)
                             except Exception as e:
                                 err_str = str(e)
-                                is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA"])
+                                is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA", "API_KEY_INVALID", "API KEY NOT VALID", "400"])
+                                if is_rate_limit:
+                                    from core.key_router import APIKeyRouter
+                                    APIKeyRouter.report_exhausted(gemini_key)
+                                    
                                 if is_rate_limit and attempt < max_retries - 1:
                                     retry_wait = None
                                     match = re.search(r"retryDelay':\s*'(\d+)(?:\.\d+)?s'", err_str)
@@ -284,8 +301,14 @@ class MatrixAgent:
                                     if retry_wait is None:
                                         retry_wait = delay * (1.5 ** attempt) + random.uniform(0.5, 1.5)
                                     
-                                    logger.warning(f"[{self.name}] Rate limit (429/RESOURCE_EXHAUSTED) hit. Retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}). Error: {e}")
+                                    logger.warning(f"[{self.name}] Rate limit hit. Rotating key and retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}).")
                                     await asyncio.sleep(retry_wait)
+                                    
+                                    # Fetch a new key for the next retry
+                                    new_key = APIKeyRouter.get_key()
+                                    if new_key:
+                                        gemini_key = new_key
+                                        client = genai.Client(api_key=gemini_key)
                                 else:
                                     raise
                                     

@@ -20,6 +20,9 @@ async def boot_matrix():
     logger.info("=======================================")
     logger.info("BOOTING THE SOVEREIGN MATRIX ENGINE")
     logger.info("=======================================")
+    import os
+    os.environ.pop("GOOGLE_API_KEY", None)
+    os.environ.pop("GEMINI_API_KEY", None)
     
     # 1. Start the Neural Bus Router
     router = NeuralBusRouter(endpoint="tcp://127.0.0.1:5555")
@@ -42,18 +45,27 @@ async def boot_matrix():
     memory_crawler = MemoryCrawler(bus_url="tcp://127.0.0.1:5555")
     memory_crawler_task = asyncio.create_task(memory_crawler.start())
     
-    # 5. Start the Agents (Neo, Trinity, Morpheus)
+    # 5. Start the Agents
     from agents.neo_agent import NeoAgent
     from agents.trinity_agent import TrinityAgent
     from agents.morpheus_agent import MorpheusAgent
+    from agents.smith_agent import SmithAgent
+    from agents.oracle_agent import OracleAgent
+    from agents.base_agent import MatrixAgent
     
     neo = NeoAgent(name="neo", bus_url="tcp://127.0.0.1:5555")
     trinity = TrinityAgent(name="trinity", bus_url="tcp://127.0.0.1:5555")
     morpheus = MorpheusAgent(name="morpheus", bus_url="tcp://127.0.0.1:5555")
+    smith = SmithAgent(name="smith", bus_url="tcp://127.0.0.1:5555")
+    oracle = OracleAgent(name="oracle", bus_url="tcp://127.0.0.1:5555")
+    base_agent = MatrixAgent(name="base", bus_url="tcp://127.0.0.1:5555")
     
     neo_task = asyncio.create_task(neo.start())
     trinity_task = asyncio.create_task(trinity.start())
     morpheus_task = asyncio.create_task(morpheus.start())
+    smith_task = asyncio.create_task(smith.start())
+    oracle_task = asyncio.create_task(oracle.start())
+    base_task = asyncio.create_task(base_agent.start())
     
     # 6. Engine FSM Setup
     engine = SovereignEngineFSM()
@@ -67,7 +79,10 @@ async def boot_matrix():
         memory_crawler_task,
         neo_task,
         trinity_task,
-        morpheus_task
+        morpheus_task,
+        smith_task,
+        oracle_task,
+        base_task
     )
 
 if __name__ == "__main__":

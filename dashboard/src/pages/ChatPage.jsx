@@ -9,6 +9,11 @@ const agents = [
   { id: 'critic', name: 'Dictatorial Critic', status: 'online' }
 ];
 
+let globalMessages = [
+  { id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }
+];
+let globalStatuses = {};
+
 export default function ChatPage() {
   const [activeAgent, setActiveAgent] = useState('neo');
   const [message, setMessage] = useState('');
@@ -16,16 +21,32 @@ export default function ChatPage() {
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const wsRef = useRef(null);
-  const [messages, setMessages] = useState([
-    { id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }
-  ]);
+  const [messages, setMessages] = useState(globalMessages);
+  const [agentStatuses, setAgentStatuses] = useState(globalStatuses);
 
   useEffect(() => {
     wsRef.current = new WebSocket('ws://127.0.0.1:8000/ws');
     
     wsRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      setMessages(prev => [...prev, { id: Date.now(), sender: data.sender, text: data.text }]);
+      if (data.type === 'status') {
+         setAgentStatuses(prev => {
+             const next = {...prev, [data.sender.toLowerCase()]: data.text};
+             globalStatuses = next;
+             return next;
+         });
+      } else {
+         setMessages(prev => {
+             const next = [...prev, { id: Date.now(), sender: data.sender, text: data.text }];
+             globalMessages = next;
+             return next;
+         });
+         setAgentStatuses(prev => {
+             const next = {...prev, [data.sender.toLowerCase()]: ''};
+             globalStatuses = next;
+             return next;
+         });
+      }
     };
 
     return () => {
@@ -37,7 +58,11 @@ export default function ChatPage() {
     if (!message.trim()) return;
     
     // Add command to local UI immediately
-    setMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: message }]);
+    setMessages(prev => {
+        const next = [...prev, { id: Date.now(), sender: 'user', text: message }];
+        globalMessages = next;
+        return next;
+    });
     
     // Send to Python bridge
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -65,20 +90,28 @@ export default function ChatPage() {
           Comm Channels
         </h2>
         <div className="flex flex-col gap-2 overflow-y-auto">
-          {agents.map(agent => (
-            <button
-              key={agent.id}
-              onClick={() => setActiveAgent(agent.id)}
-              className={`p-3 rounded flex items-center gap-3 transition-all duration-300 ${
-                activeAgent === agent.id 
-                  ? 'bg-[rgba(0,243,255,0.2)] border-l-4 border-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.3)]' 
-                  : 'hover:bg-[rgba(0,243,255,0.1)] border-l-4 border-transparent'
-              }`}
-            >
-              <div className={`w-3 h-3 rounded-full ${agent.status === 'online' ? 'bg-[#00f3ff] shadow-[0_0_8px_#00f3ff]' : 'bg-gray-500'}`} />
-              <span className="text-sm font-medium tracking-wide">{agent.name}</span>
-            </button>
-          ))}
+          {agents.map(agent => {
+            const statusText = agentStatuses[agent.id] || agentStatuses[agent.name.toLowerCase()];
+            return (
+            <div key={agent.id} className="flex flex-col gap-1">
+              <button
+                onClick={() => setActiveAgent(agent.id)}
+                className={`p-3 rounded flex items-center gap-3 transition-all duration-300 ${
+                  activeAgent === agent.id 
+                    ? 'bg-[rgba(0,243,255,0.2)] border-l-4 border-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.3)]' 
+                    : 'hover:bg-[rgba(0,243,255,0.1)] border-l-4 border-transparent'
+                }`}
+              >
+                <div className={`w-3 h-3 rounded-full ${agent.status === 'online' ? 'bg-[#00f3ff] shadow-[0_0_8px_#00f3ff]' : 'bg-gray-500'}`} />
+                <span className="text-sm font-medium tracking-wide">{agent.name}</span>
+              </button>
+              {statusText && (
+                <div className="ml-6 mr-2 p-2 rounded bg-[rgba(2,10,23,0.6)] border border-[#00f3ff]/30 text-xs text-[#00f3ff] animate-pulse">
+                  &gt; {statusText}
+                </div>
+              )}
+            </div>
+          )})}
         </div>
       </div>
 

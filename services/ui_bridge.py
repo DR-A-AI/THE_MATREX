@@ -31,9 +31,17 @@ async def startup_event():
     
     async def handle_agent_message(event: EventPayload):
         logger.info(f"Bridge received from ZMQ: {event.payload}")
+        is_status = isinstance(event.payload, dict) and "status_action" in event.payload
+        
+        if is_status:
+            text_content = event.payload.get("status_action")
+        else:
+            text_content = event.payload.get("message", str(event.payload)) if isinstance(event.payload, dict) else str(event.payload)
+            
         msg_str = json.dumps({
             "sender": event.source_agent_id,
-            "text": event.payload.get("message", str(event.payload)) if isinstance(event.payload, dict) else str(event.payload)
+            "text": text_content,
+            "type": "status" if is_status else "chat"
         })
         for conn in active_connections:
             try:

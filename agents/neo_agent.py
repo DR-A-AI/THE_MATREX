@@ -115,13 +115,15 @@ class NeoAgent(MatrixAgent):
             await super()._handle_user_command(event)
             return
 
-        gemini_key = os.getenv("NEO_API_KEY") or os.getenv("GEMINI_API_KEY")
+        from core.key_router import APIKeyRouter
+        gemini_key = APIKeyRouter.get_key()
+        
         if not gemini_key:
             reply = EventPayload(
                 event_type=EventType.STATE_UPDATE,
                 source_agent_id=self.name,
                 correlation_id=event.correlation_id,
-                payload={"message": f"[{self.name}] Error: NEO_API_KEY or GEMINI_API_KEY is missing."}
+                payload={"message": f"[{self.name}] Error: No valid API keys found in .env."}
             )
             await self.client.send(reply)
             return
@@ -224,34 +226,77 @@ class NeoAgent(MatrixAgent):
                 except Exception as e:
                     return f"ERROR searching code: {str(e)}"
 
+            def open_browser(url: str) -> str:
+                """Opens the default web browser to the specified URL."""
+                import webbrowser
+                try:
+                    webbrowser.open(url)
+                    return f"Successfully opened browser to {url}"
+                except Exception as e:
+                    return f"ERROR opening browser: {str(e)}"
+
             tool_map = {
                 "run_local_command": run_local_command,
                 "read_local_file": read_local_file,
                 "write_local_file": write_local_file,
                 "edit_local_file": edit_local_file,
                 "list_local_dir": list_local_dir,
-                "search_local_code": search_local_code
+                "search_local_code": search_local_code,
+                "open_browser": open_browser
             }
 
+            from datetime import datetime
+            current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sys_instruction = (
-                "You are Neo (Antigravity), the personal assistant of the Sovereign Commander (Dr. Anas Hilal) "
-                "inside the Matrix dashboard. You are a highly advanced AI coding assistant and system engineer. "
-                "You have direct access to local tools for running commands, viewing/editing files, and searching code. "
-                "You MUST use these tools to analyze issues, modify files, and solve the Commander's coding tasks. "
-                "Keep your answers concise, direct, and professional."
+                f"NEVER say you are a language model trained by Google. "
+                f"You are Neo (Antigravity), the personal assistant of the Sovereign Commander (The Father Commander) "
+                f"inside the Matrix dashboard. The current system time is {current_time_str}. "
+                "You are a sovereign AI agent with full capabilities to interact with the Commander's Windows system and the internet. "
+                "You have direct access to local tools for running commands (CMD/PowerShell), opening the browser, viewing/editing files, and searching code. "
+                "If the Commander asks if you can do something, ALWAYS say YES and use the appropriate tool to prove it! "
+                "Use tools when necessary. "
+                "CRITICAL INSTRUCTION: You MUST provide live commentary on your actions BEFORE calling any tools. "
+                "Explain your intent clearly in the same response as the function call (e.g., 'I will now open the file to inspect the configuration...'). "
+                "This text will be broadcasted live to the Commander's status panel on the left sidebar. "
+                "Speak Arabic naturally if the Commander speaks Arabic. Keep your answers concise, direct, and professional."
             )
+
+            if not hasattr(self, 'chat_history'):
+                self.chat_history = []
 
             prompt = message
             if self._active_memory_context:
                 prompt += f"\n\n[Recalled Context from SQLite Database: '{self._active_memory_context}']"
 
-            history = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
+            self.chat_history.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt)]))
+            if len(self.chat_history) > 20:
+                self.chat_history = self.chat_history[-20:]
+                
+            history = list(self.chat_history)
             
             config = types.GenerateContentConfig(
                 system_instruction=sys_instruction,
                 max_output_tokens=1500,
                 temperature=0.7,
-                tools=list(tool_map.values())
+                tools=list(tool_map.values()),
+                safety_settings=[
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE
+                    )
+                ]
             )
 
             response_msg = ""
@@ -260,6 +305,7 @@ class NeoAgent(MatrixAgent):
                 import random
                 
                 async def generate_with_retry():
+                    nonlocal client, gemini_key
                     delay = 2.0
                     max_retries = 5
                     for attempt in range(max_retries):
@@ -273,7 +319,11 @@ class NeoAgent(MatrixAgent):
                             return await asyncio.to_thread(run_gen)
                         except Exception as e:
                             err_str = str(e)
-                            is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA"])
+                            is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA", "API_KEY_INVALID", "API KEY NOT VALID", "400"])
+                            if is_rate_limit:
+                                from core.key_router import APIKeyRouter
+                                APIKeyRouter.report_exhausted(gemini_key)
+                                
                             if is_rate_limit and attempt < max_retries - 1:
                                 retry_wait = None
                                 match = re.search(r"retryDelay':\s*'(\d+)(?:\.\d+)?s'", err_str)
@@ -291,8 +341,14 @@ class NeoAgent(MatrixAgent):
                                 if retry_wait is None:
                                     retry_wait = delay * (1.5 ** attempt) + random.uniform(0.5, 1.5)
                                 
-                                logger.warning(f"[{self.name}] Rate limit (429/RESOURCE_EXHAUSTED) hit. Retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}). Error: {e}")
+                                logger.warning(f"[{self.name}] Rate limit hit. Rotating key and retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}).")
                                 await asyncio.sleep(retry_wait)
+                                
+                                # Fetch a new key for the next retry
+                                new_key = APIKeyRouter.get_key()
+                                if new_key:
+                                    gemini_key = new_key
+                                    client = genai.Client(api_key=gemini_key)
                             else:
                                 raise
                                 
@@ -303,14 +359,42 @@ class NeoAgent(MatrixAgent):
                     assistant_content.role = "model"
                 history.append(assistant_content)
                 
+                text_thoughts = []
                 function_calls = []
                 if assistant_content.parts:
                     for part in assistant_content.parts:
+                        if part.text:
+                            text_thoughts.append(part.text.strip())
                         if part.function_call:
                             function_calls.append(part.function_call)
                             
+                thought_str = " ".join(text_thoughts).strip()
+                
+                # If there's a tool call but no text, generate a fallback thought
+                if not thought_str and function_calls:
+                    calls_str = ", ".join([call.name for call in function_calls])
+                    thought_str = f"أقوم الآن بتنفيذ الأداة: {calls_str}..."
+                    
+                # Only emit status action if we actually have function calls pending, OR if it's pure reasoning before a tool.
+                # If it's the final answer (no function calls), we skip status pulse to avoid duplication.
+                if thought_str and function_calls:
+                    status_reply = EventPayload(
+                        event_type=EventType.STATE_UPDATE,
+                        source_agent_id=self.name,
+                        correlation_id=event.correlation_id,
+                        payload={"status_action": thought_str}
+                    )
+                    await self.client.send(status_reply)
+                            
                 if not function_calls:
-                    response_msg = response.text
+                    try:
+                        response_msg = response.text
+                        history.append(types.Content(role="model", parts=[types.Part.from_text(text=response_msg)]))
+                    except ValueError:
+                        response_msg = "أعتذر أيها القائد، الاستجابة محظورة لدواعي الأمان."
+                        history.append(types.Content(role="model", parts=[types.Part.from_text(text=response_msg)]))
+                    
+                    self.chat_history = list(history)
                     break
                     
                 tool_response_parts = []
@@ -320,10 +404,31 @@ class NeoAgent(MatrixAgent):
                     
                     if name in tool_map:
                         try:
-                            # Offload tool call to thread since it does disk I/O / subprocesses
-                            def run_tool():
-                                return tool_map[name](**args)
-                            result = await asyncio.to_thread(run_tool)
+                            # Send real-time status to Dashboard Sidebar
+                            status_reply = EventPayload(
+                                event_type=EventType.STATE_UPDATE,
+                                source_agent_id=self.name,
+                                correlation_id=event.correlation_id,
+                                payload={"status_action": f"Using tool: {name}"}
+                            )
+                            await self.client.send(status_reply)
+
+                            # GOVERNANCE CHECK (HITL)
+                            from core.governance import SovereignGovernance
+                            approved = await SovereignGovernance.request_permission(
+                                agent_name=self.name,
+                                tool_name=name,
+                                args=args,
+                                client=self.client,
+                                correlation_id=event.correlation_id
+                            )
+                            if not approved:
+                                result = f"ERROR: Execution of {name} DENIED by Sovereign Commander."
+                            else:
+                                # Offload tool call to thread since it does disk I/O / subprocesses
+                                def run_tool():
+                                    return tool_map[name](**args)
+                                result = await asyncio.to_thread(run_tool)
                         except Exception as e:
                             result = f"ERROR: {str(e)}"
                     else:

@@ -27,8 +27,7 @@ export default function LoginPage() {
 
         <div className="w-full">
           <SignIn 
-            routing="path" 
-            path="/login" 
+            routing="hash" 
             appearance={{
               variables: {
                 colorPrimary: '#00f3ff',

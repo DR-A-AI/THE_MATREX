@@ -154,7 +154,15 @@ export default function ChatPage() {
         <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
           {messages.map(msg => (
             <div key={msg.id} className={`${msg.sender === 'user' ? 'self-end bg-[rgba(0,243,255,0.15)] border border-[#00f3ff]' : 'self-start bg-[rgba(2,10,23,0.8)] border border-[rgba(0,243,255,0.2)]'} p-3 rounded-lg max-w-[70%]`}>
-              <p className="text-sm">{msg.text}</p>
+              {msg.text.includes('![') && msg.text.includes('](') ? (
+                <div>
+                  <p className="text-sm">{msg.text.split('![')[0]}</p>
+                  <img src={msg.text.split('](')[1].split(')')[0]} alt="Vision" className="max-w-full rounded-lg mt-2 border border-[#00f3ff]/30 shadow-[0_0_15px_rgba(0,243,255,0.2)]" />
+                  <p className="text-sm mt-2">{msg.text.split(')')[1]}</p>
+                </div>
+              ) : (
+                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+              )}
             </div>
           ))}
           {agentStatuses[activeAgent.toLowerCase()] && (

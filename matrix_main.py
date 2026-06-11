@@ -12,6 +12,8 @@ from core.failsafe import FailsafeMonitor
 from services.librarian import SecureLibrarian
 from core.engine import SovereignEngineFSM
 from services.memory_crawler import MemoryCrawler
+from services.assistant_crawler import AssistantCrawler
+from services.librarian_crawler import run_crawler_periodically
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s")
 logger = logging.getLogger("Matrix.Boot")
@@ -45,6 +47,13 @@ async def boot_matrix():
     memory_crawler = MemoryCrawler(bus_url="tcp://127.0.0.1:5555")
     memory_crawler_task = asyncio.create_task(memory_crawler.start())
     
+    # 4b. Start the Assistant Crawler
+    assistant_crawler = AssistantCrawler(bus_url="tcp://127.0.0.1:5555")
+    assistant_crawler_task = asyncio.create_task(assistant_crawler.start())
+    
+    # 4c. Start the Librarian Crawler (Skills)
+    skills_crawler_task = asyncio.create_task(run_crawler_periodically())
+    
     # 5. Start the Agents
     from agents.neo_agent import NeoAgent
     from agents.trinity_agent import TrinityAgent
@@ -77,6 +86,8 @@ async def boot_matrix():
         router_task,
         librarian_task,
         memory_crawler_task,
+        assistant_crawler_task,
+        skills_crawler_task,
         neo_task,
         trinity_task,
         morpheus_task,

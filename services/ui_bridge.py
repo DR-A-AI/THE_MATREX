@@ -24,6 +24,7 @@ app.add_middleware(
 
 active_connections = []
 bus_client = NeuralBusClient(identity="UI_Bridge")
+send_lock = asyncio.Lock()
 
 @app.on_event("startup")
 async def startup_event():
@@ -31,23 +32,33 @@ async def startup_event():
     
     async def handle_agent_message(event: EventPayload):
         logger.info(f"Bridge received from ZMQ: {event.payload}")
-        is_status = isinstance(event.payload, dict) and "status_action" in event.payload
+        
+        payload_data = event.payload
+        if isinstance(payload_data, str):
+            try:
+                payload_data = json.loads(payload_data)
+            except Exception:
+                pass
+
+        is_status = isinstance(payload_data, dict) and "status_action" in payload_data
         
         if is_status:
-            text_content = event.payload.get("status_action")
+            text_content = payload_data.get("status_action")
         else:
-            text_content = event.payload.get("message", str(event.payload)) if isinstance(event.payload, dict) else str(event.payload)
+            text_content = payload_data.get("message", str(payload_data)) if isinstance(payload_data, dict) else str(payload_data)
             
         msg_str = json.dumps({
             "sender": event.source_agent_id,
             "text": text_content,
             "type": "status" if is_status else "chat"
         })
-        for conn in active_connections:
-            try:
-                await conn.send_text(msg_str)
-            except Exception:
-                pass
+        
+        async with send_lock:
+            for conn in active_connections:
+                try:
+                    await conn.send_text(msg_str)
+                except Exception as e:
+                    logger.error(f"WebSocket send failed: {e}")
                 
     bus_client.register_handler(EventType.STATE_UPDATE.value, handle_agent_message)
     bus_client.register_handler(EventType.TASK_COMPLETED.value, handle_agent_message)

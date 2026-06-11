@@ -4,7 +4,7 @@ import time
 from core.neural_bus import NeuralBusClient
 from core.models import EventPayload, EventType
 
-MEMORY_CONTENT = """
+MEMORY_CONTENT = r"""
 --- GENESIS MEMORY BLOCK: COMMANDER DIRECTIVE ---
 Context: You are sovereign agents operating in J:\THE_MATRIX. The Commander is The Father Commander.
 There are 60 Google Cloud projects / keys allocated. Micro-Project Architecture (1 agent per project) is mandated.

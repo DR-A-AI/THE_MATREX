@@ -255,6 +255,46 @@ class NeoAgent(MatrixAgent):
                 except Exception as e:
                     return f"ERROR opening browser: {str(e)}"
 
+            from core import matrix_vision
+
+            def capture_screen(monitor_index: int = 1) -> str:
+                """Captures the screen and allows Neo to 'see' the Matrix. ALSO displays it to the Commander. ALWAYS use this when asked to look at or show the screen."""
+                try:
+                    import time
+                    timestamp = int(time.time())
+                    filename = f"matrix_vision_{timestamp}.png"
+                    filepath = rf"J:\THE_MATRIX\dashboard\public\{filename}"
+                    success = matrix_vision.save_screenshot(filepath, monitor_index)
+                    if not success:
+                        return "ERROR: Failed to capture screen due to system isolation or BitBlt access denied."
+                    return f"SCREENSHOT_SAVED:![Matrix Vision](http://127.0.0.1:5173/{filename})"
+                except Exception as e:
+                    return f"ERROR saving screenshot: {str(e)}"
+
+            def safe_click(x: int, y: int, button: str = 'left') -> str:
+                """Clicks the mouse at X, Y coordinates."""
+                try:
+                    matrix_vision.safe_click(x, y, button)
+                    return f"Successfully clicked {button} at {x}, {y}."
+                except Exception as e:
+                    return f"ERROR clicking: {str(e)}"
+
+            def safe_type_text(text: str) -> str:
+                """Types text directly into the active window."""
+                try:
+                    matrix_vision.safe_type_text(text)
+                    return f"Successfully typed text."
+                except Exception as e:
+                    return f"ERROR typing: {str(e)}"
+                    
+            def safe_press_key(key: str) -> str:
+                """Presses a specific key (e.g. 'enter', 'tab', 'win')."""
+                try:
+                    matrix_vision.safe_press_key(key)
+                    return f"Successfully pressed {key}."
+                except Exception as e:
+                    return f"ERROR pressing key: {str(e)}"
+
             tool_map = {
                 "run_local_command": run_local_command,
                 "read_local_file": read_local_file,
@@ -262,7 +302,11 @@ class NeoAgent(MatrixAgent):
                 "edit_local_file": edit_local_file,
                 "list_local_dir": list_local_dir,
                 "search_local_code": search_local_code,
-                "open_browser": open_browser
+                "open_browser": open_browser,
+                "capture_screen": capture_screen,
+                "safe_click": safe_click,
+                "safe_type_text": safe_type_text,
+                "safe_press_key": safe_press_key
             }
 
             from datetime import datetime
@@ -370,10 +414,17 @@ class NeoAgent(MatrixAgent):
                                 
                 response = await generate_with_retry()
                 
-                assistant_content = response.candidates[0].content
-                if not assistant_content.role:
-                    assistant_content.role = "model"
-                history.append(assistant_content)
+                assistant_content = response.candidates[0].content if response.candidates else None
+                if assistant_content:
+                    if not assistant_content.role:
+                        assistant_content.role = "model"
+                    history.append(assistant_content)
+                else:
+                    try:
+                        response_msg = response.text
+                    except ValueError:
+                        response_msg = "أعتذر، الاستجابة محظورة لدواعي الأمان أو أن النموذج أرجع محتوى فارغ."
+                    break
                 
                 text_thoughts = []
                 function_calls = []
@@ -405,6 +456,8 @@ class NeoAgent(MatrixAgent):
                 if not function_calls:
                     try:
                         response_msg = response.text
+                        if not response_msg or not response_msg.strip():
+                            response_msg = "أعتذر أيها القائد، لم أتمكن من صياغة إجابة."
                         history.append(types.Content(role="model", parts=[types.Part.from_text(text=response_msg)]))
                     except ValueError:
                         response_msg = "أعتذر أيها القائد، الاستجابة محظورة لدواعي الأمان."
@@ -445,6 +498,27 @@ class NeoAgent(MatrixAgent):
                                 def run_tool():
                                     return tool_map[name](**args)
                                 result = await asyncio.to_thread(run_tool)
+                                
+                                if name == "capture_screen" and result.startswith("SCREENSHOT_SAVED:"):
+                                    img_md = result.split("SCREENSHOT_SAVED:")[1]
+                                    result = "Screenshot taken and displayed to user."
+                                    
+                                    # Send visual to the commander UI
+                                    chat_reply = EventPayload(
+                                        event_type=EventType.STATE_UPDATE,
+                                        source_agent_id=self.name,
+                                        correlation_id=event.correlation_id,
+                                        payload={"message": f"إليك ما أراه على الشاشة الآن أيها القائد:\n\n{img_md}"}
+                                    )
+                                    await self.client.send(chat_reply)
+                                    
+                                    # Inject visual into Neo's optic nerve (Gemini history)
+                                    try:
+                                        img_part = matrix_vision.get_vision_part(args.get("monitor_index", 1))
+                                        history.append(types.Content(role="user", parts=[img_part, types.Part.from_text(text="[System: Screen optics injected into your visual cortex successfully]")]))
+                                        result += " Optics successfully loaded into your cortex."
+                                    except Exception as img_e:
+                                        result += f" Failed to load optics into cortex: {img_e}"
                         except Exception as e:
                             result = f"ERROR: {str(e)}"
                     else:

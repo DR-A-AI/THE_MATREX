@@ -1,0 +1,11 @@
+{
+    "version": "1.0",
+    "skills_count": 1,
+    "skills": [
+        {
+            "name": "Matrix Vision",
+            "description": "Allows an agent to parse green falling code visually.",
+            "path": "J:\\THE_MATRIX\\skills\\test_skill.md"
+        }
+    ]
+}

@@ -70,6 +70,14 @@ class MemoryCrawler:
         category = payload.get("category", "information")
 
         logger.info(f"[MemoryCrawler] Intercepted memory store request from [{agent_name}] (Type: {memory_type})")
+        
+        status_event = EventPayload(
+            event_type=EventType.STATE_UPDATE,
+            source_agent_id="Memory Crawler",
+            correlation_id=event.correlation_id,
+            payload={"status_action": f"Storing {memory_type} memory for {agent_name}..."}
+        )
+        await self.client.send(status_event)
 
         # 1. Run Aegis QA check if content looks like executable code or scripts
         if "def " in raw_content or "import " in raw_content or "eval(" in raw_content:
@@ -114,6 +122,15 @@ class MemoryCrawler:
                 payload={"message": f"Database insertion failed for agent [{agent_name}]"}
             )
             await self.client.send(error_event)
+            
+        # Clear status
+        clear_status = EventPayload(
+            event_type=EventType.STATE_UPDATE,
+            source_agent_id="Memory Crawler",
+            correlation_id=event.correlation_id,
+            payload={"status_action": ""}
+        )
+        await self.client.send(clear_status)
 
     async def _handle_recall_request(self, event: EventPayload):
         payload = event.payload
@@ -121,6 +138,14 @@ class MemoryCrawler:
         query = payload.get("query", "")
 
         logger.info(f"[MemoryCrawler] Intercepted memory recall request from [{agent_name}] for query: '{query}'")
+
+        status_event = EventPayload(
+            event_type=EventType.STATE_UPDATE,
+            source_agent_id="Memory Crawler",
+            correlation_id=event.correlation_id,
+            payload={"status_action": f"Recalling memory for {agent_name}..."}
+        )
+        await self.client.send(status_event)
 
         # 1. Query Agent SQLite DB
         db = self._get_db(agent_name)
@@ -139,6 +164,15 @@ class MemoryCrawler:
         )
         await self.client.send(inject_event)
         logger.info(f"[MemoryCrawler] Injected {len(memories)} recalled memories back to [{agent_name}].")
+        
+        # Clear status
+        clear_status = EventPayload(
+            event_type=EventType.STATE_UPDATE,
+            source_agent_id="Memory Crawler",
+            correlation_id=event.correlation_id,
+            payload={"status_action": ""}
+        )
+        await self.client.send(clear_status)
 
 if __name__ == "__main__":
     import sys

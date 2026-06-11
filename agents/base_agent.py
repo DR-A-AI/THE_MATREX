@@ -16,12 +16,15 @@ logger = logging.getLogger("MatrixAgent")
 class MatrixAgent:
     def __init__(self, name: str, bus_url: str = "tcp://127.0.0.1:5555"):
         self.name = name
-        self.agent_id = f"{name}-{uuid.uuid4().hex[:8]}"
-        self.client = NeuralBusClient(identity=self.agent_id, endpoint=bus_url)
-        self._running = False
-        
-        # Emergency Stash injected by Assistant Crawler
-        # Dictionary format: {token_string: expiration_timestamp}
+        self.bus_url = bus_url
+        self.agent_id = str(uuid.uuid4())
+        self.client = NeuralBusClient(identity=self.name, endpoint=self.bus_url)
+        self._CORE_IDENTITY = {
+            "identity": "Sovereign Agent",
+            "commander": "الأب القائد",
+            "role": "General execution and loyalty"
+        }
+        self.chat_history = []
         self.emergency_token_stash: Dict[str, float] = {}
         self.MAX_STASH_SIZE = 2
         
@@ -262,11 +265,31 @@ class MatrixAgent:
                     prompt = message
                     if self._active_memory_context:
                         prompt += f"\n\n[Recalled Context from SQLite Database: '{self._active_memory_context}']"
+                        self._active_memory_context = "" # Clear after use
                         
+                    self.chat_history.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt)]))
+                    if len(self.chat_history) > 20:
+                        self.chat_history = self.chat_history[-20:]
+                        
+                    def open_browser(url: str) -> str:
+                        """Opens the default web browser to the specified URL."""
+                        import webbrowser
+                        try:
+                            webbrowser.open(url)
+                            return f"Successfully opened browser to {url}"
+                        except Exception as e:
+                            return f"ERROR opening browser: {str(e)}"
+                            
+                    base_tools = [open_browser]
+                    base_tool_map = {
+                        "open_browser": open_browser
+                    }
+
                     config = types.GenerateContentConfig(
                         system_instruction=sys_instruction,
                         max_output_tokens=1000,
                         temperature=0.7,
+                        tools=base_tools,
                         safety_settings=[
                             types.SafetySetting(
                                 category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -291,56 +314,89 @@ class MatrixAgent:
                     import re
                     import random
                     
-                    async def generate_with_retry():
-                        nonlocal client, gemini_key
-                        delay = 2.0
-                        max_retries = 5
-                        for attempt in range(max_retries):
+                    response_msg = ""
+                    for iteration in range(5):
+                        async def generate_with_retry():
+                            nonlocal client, gemini_key
+                            delay = 2.0
+                            max_retries = 40
+                            for attempt in range(max_retries):
+                                try:
+                                    def run_gen():
+                                        local_client = genai.Client(api_key=gemini_key)
+                                        return local_client.models.generate_content(
+                                            model="gemini-2.5-flash-lite",
+                                            contents=self.chat_history,
+                                            config=config
+                                        )
+                                    return await asyncio.to_thread(run_gen)
+                                except Exception as e:
+                                    err_str = str(e)
+                                    logger.error(f"[{self.name}] Gemini API Error (Attempt {attempt}): {err_str}")
+                                    is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA", "API_KEY_INVALID", "API KEY NOT VALID", "400", "503"])
+                                    if is_rate_limit:
+                                        from core.key_router import APIKeyRouter
+                                        APIKeyRouter.report_exhausted(gemini_key)
+                                        
+                                    if is_rate_limit and attempt < max_retries - 1:
+                                        new_key = APIKeyRouter.get_key()
+                                        if new_key and new_key != gemini_key:
+                                            gemini_key = new_key
+                                        await asyncio.sleep(1.0)
+                                        continue
+                                    raise e
+                                    
+                        response = await generate_with_retry()
+                        
+                        assistant_content = response.candidates[0].content if response.candidates else None
+                        if assistant_content:
+                            if not assistant_content.role:
+                                assistant_content.role = "model"
+                            self.chat_history.append(assistant_content)
+                        else:
+                            # If no content, it could be blocked or an empty model reply
                             try:
-                                def run_gen():
-                                    return client.models.generate_content(
-                                        model="gemini-2.5-flash-lite",
-                                        contents=prompt,
-                                        config=config
-                                    )
-                                return await asyncio.to_thread(run_gen)
-                            except Exception as e:
-                                err_str = str(e)
-                                is_rate_limit = any(term in err_str or term.upper() in err_str for term in ["429", "RESOURCE_EXHAUSTED", "QUOTA", "API_KEY_INVALID", "API KEY NOT VALID", "400"])
-                                if is_rate_limit:
-                                    from core.key_router import APIKeyRouter
-                                    APIKeyRouter.report_exhausted(gemini_key)
+                                response_msg = response.text
+                            except ValueError:
+                                response_msg = "أعتذر، الاستجابة محظورة لدواعي الأمان أو أن النموذج أرجع محتوى فارغ."
+                            break
+                        
+                        function_calls = []
+                        if assistant_content.parts:
+                            for part in assistant_content.parts:
+                                if part.function_call:
+                                    function_calls.append(part.function_call)
                                     
-                                if is_rate_limit and attempt < max_retries - 1:
-                                    retry_wait = None
-                                    match = re.search(r"retryDelay':\s*'(\d+)(?:\.\d+)?s'", err_str)
-                                    if not match:
-                                        match = re.search(r'retryDelay":\s*"(\d+)(?:\.\d+)?s"', err_str)
-                                    if not match:
-                                        match = re.search(r"retry\s+(?:in|after)\s+(\d+)(?:\.\d+)?s", err_str, re.IGNORECASE)
-                                    
-                                    if match:
-                                        try:
-                                            retry_wait = float(match.group(1)) + 1.0
-                                        except ValueError:
-                                            pass
-                                    
-                                    if retry_wait is None:
-                                        retry_wait = delay * (1.5 ** attempt) + random.uniform(0.5, 1.5)
-                                    
-                                    logger.warning(f"[{self.name}] Rate limit hit. Rotating key and retrying in {retry_wait:.2f}s (Attempt {attempt+1}/{max_retries}).")
-                                    await asyncio.sleep(retry_wait)
-                                    
-                                    # Fetch a new key for the next retry
-                                    new_key = APIKeyRouter.get_key()
-                                    if new_key:
-                                        gemini_key = new_key
-                                        client = genai.Client(api_key=gemini_key)
-                                else:
-                                    raise
-                                    
-                    response = await generate_with_retry()
-                    response_msg = response.text
+                        if not function_calls:
+                            try:
+                                response_msg = response.text
+                                if not response_msg or not response_msg.strip():
+                                    response_msg = "أعتذر، لم أتمكن من صياغة إجابة."
+                            except ValueError:
+                                response_msg = "أعتذر، الاستجابة محظورة لدواعي الأمان."
+                            break
+                            
+                        tool_response_parts = []
+                        for call in function_calls:
+                            name = call.name
+                            args = call.args
+                            if name in base_tool_map:
+                                try:
+                                    def run_tool():
+                                        return base_tool_map[name](**args)
+                                    result = await asyncio.to_thread(run_tool)
+                                except Exception as e:
+                                    result = f"ERROR: {str(e)}"
+                            else:
+                                result = f"ERROR: Function {name} not found."
+                                
+                            tool_response_parts.append(
+                                types.Part.from_function_response(name=name, response={"result": result})
+                            )
+                        self.chat_history.append(types.Content(role="tool", parts=tool_response_parts))
+                    
+                    if not response_msg:
+                        response_msg = "Error: Tool execution loop limit exceeded."
                 except Exception as e:
                     logger.error(f"[{self.name}] Gemini generation failed: {e}")
                     response_msg = f"[{self.name}] Gemini call failed. Direct answer: {message}"

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { MessageSquare, Activity, LogOut } from 'lucide-react';
+import { UserButton } from '@clerk/clerk-react';
 import ChatPage from './pages/ChatPage';
 import MetricsPage from './pages/MetricsPage';
 import LoginPage from './pages/LoginPage';
@@ -39,13 +40,7 @@ function TopNav({ email, onLogout }) {
           <Activity size={18} />
           <span className="tracking-wide text-sm font-medium">TELEMETRY</span>
         </Link>
-        <button 
-          onClick={onLogout}
-          className="flex items-center justify-center p-2 rounded-full hover:bg-[rgba(255,0,0,0.15)] hover:text-red-500 border border-transparent hover:border-red-500 transition-all duration-300 cursor-pointer"
-          title="Disconnect Node"
-        >
-          <LogOut size={18} />
-        </button>
+        <UserButton />
       </div>
     </nav>
   );

@@ -56,7 +56,7 @@ export default function App() {
 
   if (!email) {
     return (
-      <Router>
+      <Router basename="/THE_MATREX/">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
@@ -66,7 +66,7 @@ export default function App() {
   }
 
   return (
-    <Router>
+    <Router basename="/THE_MATREX/">
       <div className="min-h-screen p-4">
         <TopNav email={email} onLogout={handleLogout} />
         <Routes>

@@ -1,0 +1,31 @@
+name: Deploy Sovereign Dashboard
+on:
+  push:
+    branches: [ main ]
+permissions:
+  contents: write
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install and Build 🔧
+        working-directory: ./dashboard
+        run: |
+          npm install
+          npm run build
+        env:
+          VITE_SYNCFUSION_LICENSE_KEY: Ngo9BigBOggjGyl/VkV+XU9AclRDX3xKf0x/TGpQb19xflBPallYVBYiSV9jS3hTc0VqWXdednVUQ2JYVU91XA==
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_bWVhc3VyZWQtY2hpcG11bmstNzguY2xlcmsuYWNjb3VudHMuZGV2JA
+
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dashboard/dist

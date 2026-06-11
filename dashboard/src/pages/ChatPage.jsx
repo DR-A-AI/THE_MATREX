@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Paperclip, Send, Folder, Image as ImageIcon, FileText, Video } from 'lucide-react';
+import { useAuth } from '@clerk/clerk-react';
 
 const agents = [
   { id: 'neo', name: 'Neo (Coordinator)', status: 'online' },
@@ -23,6 +24,7 @@ let globalMessages = getInitialMessages();
 let globalStatuses = {};
 
 export default function ChatPage() {
+  const { getToken } = useAuth();
   const [activeAgent, setActiveAgent] = useState('neo');
   const [message, setMessage] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -43,8 +45,14 @@ export default function ChatPage() {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => {
-        console.log('WebSocket connected');
+      ws.onopen = async () => {
+        console.log('WebSocket connected. Authenticating...');
+        try {
+          const token = await getToken();
+          ws.send(JSON.stringify({ clerk_token: token }));
+        } catch (err) {
+          console.error("Failed to get Clerk token", err);
+        }
       };
 
       ws.onmessage = (event) => {

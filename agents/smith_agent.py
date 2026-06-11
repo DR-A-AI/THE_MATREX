@@ -11,7 +11,7 @@ class SmithAgent(MatrixAgent):
     Responsible for deep RAG, code generation, logic building, and development.
     """
     
-    def __init__(self, name: str = "smith-primary", bus_url: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, name: str = "smith-primary", bus_url: str = None):
         super().__init__(name=name, bus_url=bus_url)
         self._CORE_IDENTITY = {
             "identity": "Sovereign Architect & Spy",

@@ -14,7 +14,9 @@ load_dotenv()
 logger = logging.getLogger("MatrixAgent")
 
 class MatrixAgent:
-    def __init__(self, name: str, bus_url: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, name: str, bus_url: str = None):
+        if bus_url is None:
+            bus_url = os.getenv("ZMQ_BUS_URL", "tcp://127.0.0.1:5555")
         self.name = name
         self.bus_url = bus_url
         self.agent_id = str(uuid.uuid4())
@@ -83,7 +85,7 @@ class MatrixAgent:
         socket = ctx.socket(zmq.REQ)
         socket.setsockopt(zmq.LINGER, 0)
         socket.setsockopt(zmq.IDENTITY, self.agent_id.encode('utf-8'))
-        socket.connect("tcp://127.0.0.1:5557")
+        socket.connect(os.getenv("LIBRARIAN_URL", "tcp://127.0.0.1:5557"))
         
         try:
             logger.info(f"[{self.name}] Requesting tool execution from Librarian for scope: {tool_name}")

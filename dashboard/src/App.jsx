@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { MessageSquare, Activity, LogOut } from 'lucide-react';
-import { UserButton } from '@clerk/clerk-react';
+import { MessageSquare, Activity } from 'lucide-react';
+import { UserButton, SignedIn, SignedOut, useUser } from '@clerk/clerk-react';
 import ChatPage from './pages/ChatPage';
 import MetricsPage from './pages/MetricsPage';
 import LoginPage from './pages/LoginPage';
 
-function TopNav({ email, onLogout }) {
+function TopNav() {
   const location = useLocation();
+  const { user } = useUser();
+  const email = user?.primaryEmailAddress?.emailAddress || 'commander@sovereign.ai';
   
   return (
     <nav className="h-20 glass-panel mb-6 flex items-center justify-between px-8 border-b border-[rgba(0,243,255,0.3)]">
@@ -47,33 +49,23 @@ function TopNav({ email, onLogout }) {
 }
 
 export default function App() {
-  const [email, setEmail] = useState(localStorage.getItem('commander_email'));
-
-  const handleLogout = () => {
-    localStorage.removeItem('commander_email');
-    setEmail(null);
-  };
-
-  if (!email) {
-    return (
-      <Router basename="/THE_MATREX/">
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </Router>
-    );
-  }
-
   return (
     <Router basename="/THE_MATREX/">
       <div className="min-h-screen p-4">
-        <TopNav email={email} onLogout={handleLogout} />
-        <Routes>
-          <Route path="/" element={<ChatPage />} />
-          <Route path="/metrics" element={<MetricsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <SignedIn>
+          <TopNav />
+          <Routes>
+            <Route path="/" element={<ChatPage />} />
+            <Route path="/metrics" element={<MetricsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SignedIn>
+        <SignedOut>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </SignedOut>
       </div>
     </Router>
   );

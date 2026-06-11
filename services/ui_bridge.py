@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import sys
+import os
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,11 +13,45 @@ from core.models import EventPayload, EventType
 logger = logging.getLogger("Sovereign.UI_Bridge")
 logging.basicConfig(level=logging.INFO)
 
+# --- Clerk Validation Logic ---
+try:
+    import jwt
+    JWT_AVAILABLE = True
+except ImportError:
+    JWT_AVAILABLE = False
+    logger.critical("PyJWT not installed. Clerk validation will fail. Run: pip install PyJWT cryptography")
+
+CLERK_PEM_PUBLIC_KEY = os.getenv("CLERK_PEM_PUBLIC_KEY", "")
+
+def verify_clerk_token(token: str) -> bool:
+    if not token:
+        logger.critical("SECURITY LEAK: No Clerk token provided by frontend!")
+        return False
+        
+    if not JWT_AVAILABLE:
+        logger.critical("SECURITY LEAK: PyJWT not installed. Cannot verify token! Denying access.")
+        return False
+        
+    if not CLERK_PEM_PUBLIC_KEY:
+        logger.critical("SECURITY WARNING: CLERK_PEM_PUBLIC_KEY is missing! Enforcing strict deny.")
+        return False
+        
+    try:
+        decoded = jwt.decode(token, CLERK_PEM_PUBLIC_KEY, algorithms=["RS256"])
+        logger.info(f"Clerk Token verified for user: {decoded.get('sub')}")
+        return True
+    except jwt.ExpiredSignatureError:
+        logger.error("Clerk Token expired.")
+        return False
+    except Exception as e:
+        logger.error(f"Clerk Token validation failed: {e}")
+        return False
+
 app = FastAPI(title="Sovereign UI Bridge")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,7 +89,7 @@ async def startup_event():
         })
         
         async with send_lock:
-            for conn in active_connections:
+            for conn in list(active_connections):
                 try:
                     await conn.send_text(msg_str)
                 except Exception as e:
@@ -70,10 +105,26 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.append(websocket)
     logger.info("New UI WebSocket Connection Established.")
+    
+    authenticated = False
+    
     try:
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
+            
+            if not authenticated:
+                token = payload.get("clerk_token")
+                if verify_clerk_token(token):
+                    authenticated = True
+                    await websocket.send_text(json.dumps({"type": "auth", "status": "success"}))
+                    continue
+                else:
+                    logger.critical("Unauthorized UI connection attempt closed.")
+                    await websocket.send_text(json.dumps({"type": "auth", "status": "failed"}))
+                    await websocket.close()
+                    break
+
             target_agent = payload.get("agent", "neo")
             user_text = payload.get("text", "")
             
@@ -88,13 +139,15 @@ async def websocket_endpoint(websocket: WebSocket):
             await bus_client.send(event)
             
     except WebSocketDisconnect:
-        active_connections.remove(websocket)
         logger.info("UI WebSocket Connection Closed.")
+    finally:
+        if websocket in active_connections:
+            active_connections.remove(websocket)
 
 def run_bridge():
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    uvicorn.run("services.ui_bridge:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("services.ui_bridge:app", host=os.getenv("UI_HOST", "0.0.0.0"), port=int(os.getenv("UI_PORT", 8000)), reload=False)
 
 if __name__ == "__main__":
     run_bridge()

@@ -27,7 +27,7 @@ async def boot_matrix():
     os.environ.pop("GEMINI_API_KEY", None)
     
     # 1. Start the Neural Bus Router
-    router = NeuralBusRouter(endpoint="tcp://127.0.0.1:5555")
+    router = NeuralBusRouter(endpoint=os.getenv("ZMQ_ROUTER_URL", "tcp://0.0.0.0:5555"))
     router_task = asyncio.create_task(router.start())
     
     # 2. Start the Failsafe Monitor
@@ -44,11 +44,12 @@ async def boot_matrix():
     librarian_task = asyncio.create_task(librarian.run())
 
     # 4. Start the Memory Crawler
-    memory_crawler = MemoryCrawler(bus_url="tcp://127.0.0.1:5555")
+    bus_url = os.getenv("ZMQ_BUS_URL", "tcp://127.0.0.1:5555")
+    memory_crawler = MemoryCrawler(bus_url=bus_url)
     memory_crawler_task = asyncio.create_task(memory_crawler.start())
     
     # 4b. Start the Assistant Crawler
-    assistant_crawler = AssistantCrawler(bus_url="tcp://127.0.0.1:5555")
+    assistant_crawler = AssistantCrawler(bus_url=bus_url)
     assistant_crawler_task = asyncio.create_task(assistant_crawler.start())
     
     # 4c. Start the Librarian Crawler (Skills)
@@ -62,12 +63,12 @@ async def boot_matrix():
     from agents.oracle_agent import OracleAgent
     from agents.base_agent import MatrixAgent
     
-    neo = NeoAgent(name="neo", bus_url="tcp://127.0.0.1:5555")
-    trinity = TrinityAgent(name="trinity", bus_url="tcp://127.0.0.1:5555")
-    morpheus = MorpheusAgent(name="morpheus", bus_url="tcp://127.0.0.1:5555")
-    smith = SmithAgent(name="smith", bus_url="tcp://127.0.0.1:5555")
-    oracle = OracleAgent(name="oracle", bus_url="tcp://127.0.0.1:5555")
-    base_agent = MatrixAgent(name="base", bus_url="tcp://127.0.0.1:5555")
+    neo = NeoAgent(name="neo", bus_url=bus_url)
+    trinity = TrinityAgent(name="trinity", bus_url=bus_url)
+    morpheus = MorpheusAgent(name="morpheus", bus_url=bus_url)
+    smith = SmithAgent(name="smith", bus_url=bus_url)
+    oracle = OracleAgent(name="oracle", bus_url=bus_url)
+    base_agent = MatrixAgent(name="base", bus_url=bus_url)
     
     neo_task = asyncio.create_task(neo.start())
     trinity_task = asyncio.create_task(trinity.start())

@@ -12,7 +12,7 @@ class TrinityAgent(MatrixAgent):
     Capable of interfacing with financial platforms and extracting sensitive keys blindly.
     """
     
-    def __init__(self, name: str = "trinity-primary", bus_url: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, name: str = "trinity-primary", bus_url: str = None):
         super().__init__(name=name, bus_url=bus_url)
         self._CORE_IDENTITY = {
             "identity": "Sovereign Vault Extractor",

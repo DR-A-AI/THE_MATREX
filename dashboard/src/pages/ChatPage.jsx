@@ -33,32 +33,62 @@ export default function ChatPage() {
   const [agentStatuses, setAgentStatuses] = useState(globalStatuses);
 
   useEffect(() => {
-    wsRef.current = new WebSocket('ws://127.0.0.1:8000/ws');
-    
-    wsRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'status') {
-         setAgentStatuses(prev => {
-             const next = {...prev, [data.sender.toLowerCase()]: data.text};
-             globalStatuses = next;
-             return next;
-         });
-      } else {
-         setMessages(prev => {
-             const next = [...prev, { id: Date.now(), sender: data.sender, text: data.text }];
-             globalMessages = next;
-             localStorage.setItem('matrixMessages', JSON.stringify(next));
-             return next;
-         });
-         setAgentStatuses(prev => {
-             const next = {...prev, [data.sender.toLowerCase()]: ''};
-             globalStatuses = next;
-             return next;
-         });
-      }
+    let reconnectTimer = null;
+    let isMounted = true;
+
+    const connect = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}/ws`;
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'status') {
+           setAgentStatuses(prev => {
+               const next = {...prev, [data.sender.toLowerCase()]: data.text};
+               globalStatuses = next;
+               return next;
+           });
+        } else {
+           setMessages(prev => {
+               const next = [...prev, { id: Date.now(), sender: data.sender, text: data.text }];
+               globalMessages = next;
+               localStorage.setItem('matrixMessages', JSON.stringify(next));
+               return next;
+           });
+           setAgentStatuses(prev => {
+               const next = {...prev, [data.sender.toLowerCase()]: ''};
+               globalStatuses = next;
+               return next;
+           });
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        if (isMounted) {
+          console.log('Attempting to reconnect in 3 seconds...');
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        ws.close();
+      };
     };
 
+    connect();
+
     return () => {
+      isMounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsRef.current) wsRef.current.close();
     };
   }, []);

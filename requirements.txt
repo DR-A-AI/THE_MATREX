@@ -15,8 +15,6 @@ psycopg2-binary>=2.9.9
 sqlalchemy>=2.0.23
 
 # Async & Concurrency
-asyncio-contextmanager>=1.0.0
-aioredis>=2.0.1
 
 # CLI & UI
 rich>=13.7.0
@@ -52,3 +50,4 @@ tenacity>=8.2.3
 
 # Security
 cryptography>=41.0.7
+PyJWT>=2.8.0

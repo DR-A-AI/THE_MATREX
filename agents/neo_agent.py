@@ -16,7 +16,7 @@ class NeoAgent(MatrixAgent):
     Capable of operating in the Dark (Headless/Background) and the Light (Interactive/GUI),
     as well as blind key extraction under the Sovereign Constitution.
     """
-    def __init__(self, name: str = "neo", bus_url: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, name: str = "neo", bus_url: str = None):
         super().__init__(name=name, bus_url=bus_url)
         self._CORE_IDENTITY = {
             "identity": "Sovereign Extractor & Savior",
@@ -267,7 +267,8 @@ class NeoAgent(MatrixAgent):
                     success = matrix_vision.save_screenshot(filepath, monitor_index)
                     if not success:
                         return "ERROR: Failed to capture screen due to system isolation or BitBlt access denied."
-                    return f"SCREENSHOT_SAVED:![Matrix Vision](http://127.0.0.1:5173/{filename})"
+                    dashboard_url = os.getenv("DASHBOARD_URL", "http://127.0.0.1:5173")
+                    return f"SCREENSHOT_SAVED:![Matrix Vision]({dashboard_url}/{filename})"
                 except Exception as e:
                     return f"ERROR saving screenshot: {str(e)}"
 

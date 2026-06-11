@@ -7,26 +7,33 @@ import time
 import hmac
 import hashlib
 import secrets
+import os
 from typing import Dict, Any, Callable, Optional
 from core.models import EventPayload
 
 logger = logging.getLogger("Sovereign.NeuralBus")
 
-# Pre-shared Sovereign Key
-BUS_SECRET = b"SOVEREIGN_RAZOR_STATIC_SECRET_DO_NOT_USE_IN_PROD"
+import os
+
+# Pre-shared Sovereign Key - MUST be injected via environment
+_secret = os.getenv("SOVEREIGN_BUS_SECRET")
+if not _secret:
+    logger.critical("SECURITY LEAK: SOVEREIGN_BUS_SECRET not set! Refusing to use static secret.")
+    raise ValueError("SOVEREIGN_BUS_SECRET environment variable is REQUIRED.")
+BUS_SECRET = _secret.encode('utf-8')
 
 class NeuralBusClient:
     """Zero-Trust Neural Bus Client with HMAC-SHA256 and Anti-Replay"""
     
-    def __init__(self, identity: str, endpoint: str = "tcp://127.0.0.1:5555"):
+    def __init__(self, identity: str, endpoint: str = None):
         self.identity = identity
-        self.endpoint = endpoint
+        self.endpoint = endpoint or os.getenv("ZMQ_BUS_URL", "tcp://127.0.0.1:5555")
         self.context = zmq.asyncio.Context.instance()
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.setsockopt_string(zmq.IDENTITY, self.identity)
         
         self.handlers: Dict[str, Callable] = {}
-        self.seen_nonces = set()
+        self.seen_nonces: Dict[str, float] = {}
         self._listen_task: Optional[asyncio.Task] = None
 
     def _sign_payload(self, payload_bytes: bytes) -> str:
@@ -83,15 +90,20 @@ class NeuralBusClient:
                     
                     # 2. Anti-Replay Check
                     nonce = msg_dict.get("nonce")
+                    current_time = time.time()
+                    
+                    # Purge old nonces (TTL 5 seconds)
+                    self.seen_nonces = {k: v for k, v in self.seen_nonces.items() if current_time - v <= 5.0}
+
                     if nonce in self.seen_nonces:
                         logger.critical(f"[{self.identity}] REPLAY ATTACK DETECTED! Nonce {nonce} already processed.")
                         continue
                     if nonce:
-                        self.seen_nonces.add(nonce)
+                        self.seen_nonces[nonce] = current_time
                         
-                    # 3. TTL Check (5 seconds)
+                    # 3. TTL Check (60 seconds)
                     msg_time = msg_dict.get("timestamp", 0)
-                    if time.time() - msg_time > 5.0:
+                    if time.time() - msg_time > 60.0:
                         logger.warning(f"[{self.identity}] Message TTL expired. Dropping message.")
                         continue
                     
@@ -109,8 +121,8 @@ class NeuralBusClient:
 
 class NeuralBusRouter:
     """The central router that binds to port 5555 and broadcasts/routes."""
-    def __init__(self, endpoint: str = "tcp://127.0.0.1:5555"):
-        self.endpoint = endpoint
+    def __init__(self, endpoint: str = None):
+        self.endpoint = endpoint or os.getenv("ZMQ_ROUTER_URL", "tcp://0.0.0.0:5555")
         self.context = zmq.asyncio.Context.instance()
         self.socket = self.context.socket(zmq.ROUTER)
         # Enable mandatory routing to detect offline clients
@@ -143,10 +155,11 @@ class NeuralBusRouter:
                     for client in list(self.active_clients):
                         if client != sender:
                             try:
-                                await self.socket.send_multipart([client, signature, msg_bytes])
+                                # Architectural Fix: Use NOBLOCK to prevent one slow client from blocking the entire bus
+                                await self.socket.send_multipart([client, signature, msg_bytes], flags=zmq.NOBLOCK)
                             except zmq.ZMQError as e:
-                                # Host unreachable (EHOSTUNREACH)
-                                logger.info(f"Client {client.decode(errors='replace')} unreachable, purging.")
+                                # Host unreachable or Queue full (EAGAIN)
+                                logger.info(f"Client {client.decode(errors='replace')} unreachable or queue full (errno={e.errno}), purging.")
                                 disconnected.append(client)
                             except Exception:
                                 disconnected.append(client)

@@ -28,6 +28,8 @@ export default function LoginPage() {
         <div className="w-full">
           <SignIn 
             routing="hash" 
+            forceRedirectUrl="/THE_MATREX/"
+            fallbackRedirectUrl="/THE_MATREX/"
             appearance={{
               variables: {
                 colorPrimary: '#00f3ff',

@@ -1,0 +1,8 @@
+{
+  "name": "the-matrix",
+  "version": "1.0.0",
+  "scripts": {
+    "install": "cd dashboard && npm install",
+    "build": "cd dashboard && npm run build"
+  }
+}

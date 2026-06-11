@@ -21,6 +21,7 @@ jobs:
         run: |
           npm install
           npm run build
+          cp dist/index.html dist/404.html
         env:
           VITE_SYNCFUSION_LICENSE_KEY: Ngo9BigBOggjGyl/VkV+XU9AclRDX3xKf0x/TGpQb19xflBPallYVBYiSV9jS3hTc0VqWXdednVUQ2JYVU91XA==
           VITE_CLERK_PUBLISHABLE_KEY: pk_test_bWVhc3VyZWQtY2hpcG11bmstNzguY2xlcmsuYWNjb3VudHMuZGV2JA

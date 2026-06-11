@@ -45,7 +45,7 @@ async def run_sovereign_mcp_gateway():
     pids = await asyncio.gather(
         launch_mcp_node_detached("Chrome_DevTools_MCP", puppeteer_cmd),
         launch_mcp_node_detached("GitHub_MCP", github_cmd),
-        launch_mcp_node_detached("UI_WebSocket_Bridge", ui_bridge_cmd)
+        
     )
     
     logger.info("=" * 50)

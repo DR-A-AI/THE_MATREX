@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { MessageSquare, Activity } from 'lucide-react';
 import { UserButton, SignedIn, SignedOut, useUser } from '@clerk/clerk-react';
 import ChatPage from './pages/ChatPage';
@@ -50,7 +50,7 @@ function TopNav() {
 
 export default function App() {
   return (
-    <Router basename="/THE_MATREX/">
+    <Router>
       <div className="min-h-screen p-4">
         <SignedIn>
           <TopNav />

@@ -1,0 +1,140 @@
+name: sync-awesome-copilot
+
+# Real link to the upstream asset library: github/awesome-copilot (public).
+# Vendored by an actions/checkout on the runner -- no PAT, no submodule,
+# no locally-pinned commit that resolves on nobody's remote.
+
+on:
+  repository_dispatch:
+    types: [sync-awesome-copilot]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Upstream ref to vendor (branch, tag or SHA)'
+        required: false
+        default: 'main'
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-awesome-copilot
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: github/awesome-copilot
+  VENDOR_DIR: vendor/awesome-copilot
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
+      - name: Resolve upstream ref
+        id: cfg
+        run: |
+          REF="${{ github.event.client_payload.ref }}"
+          [ -z "$REF" ] && REF="${{ github.event.inputs.ref }}"
+          [ -z "$REF" ] && REF="main"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Vendoring $UPSTREAM @ $REF"
+
+      - name: Checkout upstream awesome-copilot
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: ${{ steps.cfg.outputs.ref }}
+          path: .upstream
+          fetch-depth: 1
+
+      - name: Record upstream commit
+        id: up
+        run: |
+          SHA="$(git -C .upstream rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Upstream HEAD = $SHA"
+
+      - name: Vendor assets
+        id: vendor
+        run: |
+          set -euo pipefail
+          rm -rf "$VENDOR_DIR"
+          mkdir -p "$VENDOR_DIR"
+
+          MISSING=0
+          for D in skills agents instructions; do
+            if [ -d ".upstream/$D" ]; then
+              mkdir -p "$VENDOR_DIR/$D"
+              cp -R ".upstream/$D/." "$VENDOR_DIR/$D/"
+            else
+              echo "::warning::upstream directory '$D' not found"
+              MISSING=$((MISSING+1))
+            fi
+          done
+
+          SKILLS=$(find "$VENDOR_DIR/skills" -type f 2>/dev/null | wc -l | tr -d ' ')
+          AGENTS=$(find "$VENDOR_DIR/agents" -type f 2>/dev/null | wc -l | tr -d ' ')
+          INSTR=$(find "$VENDOR_DIR/instructions" -type f 2>/dev/null | wc -l | tr -d ' ')
+
+          echo "skills=$SKILLS"   >> "$GITHUB_OUTPUT"
+          echo "agents=$AGENTS"   >> "$GITHUB_OUTPUT"
+          echo "instr=$INSTR"     >> "$GITHUB_OUTPUT"
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+
+          cat > "$VENDOR_DIR/MANIFEST.json" <<EOF
+          {
+            "upstream": "https://github.com/${UPSTREAM}",
+            "ref": "${{ steps.cfg.outputs.ref }}",
+            "commit": "${{ steps.up.outputs.sha }}",
+            "permalink": "https://github.com/${UPSTREAM}/tree/${{ steps.up.outputs.sha }}",
+            "synced_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "counts": { "skills": $SKILLS, "agents": $AGENTS, "instructions": $INSTR },
+            "missing": $MISSING
+          }
+          EOF
+          cat "$VENDOR_DIR/MANIFEST.json"
+
+      - name: Verify link is real
+        run: |
+          set -euo pipefail
+          test "${{ steps.vendor.outputs.missing }}" = "0" \
+            || { echo "::error::missing upstream directories"; exit 1; }
+          test "${{ steps.vendor.outputs.skills }}" -gt 0 \
+            || { echo "::error::vendored 0 skills"; exit 1; }
+          test "${{ steps.vendor.outputs.agents }}" -gt 0 \
+            || { echo "::error::vendored 0 agents"; exit 1; }
+          echo "OK: link resolves on the remote and carries content."
+
+      - name: Commit vendored tree
+        run: |
+          set -euo pipefail
+          rm -rf .upstream
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A "$VENDOR_DIR"
+          if git diff --cached --quiet; then
+            echo "No change -- vendored tree already at ${{ steps.up.outputs.sha }}"
+            exit 0
+          fi
+          git commit -m "chore(vendor): sync ${UPSTREAM}@${{ steps.up.outputs.sha }} (skills=${{ steps.vendor.outputs.skills }}, agents=${{ steps.vendor.outputs.agents }}, instructions=${{ steps.vendor.outputs.instr }})"
+          git push
+
+      - name: Summary
+        run: |
+          {
+            echo "## awesome-copilot link"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| upstream | \`${UPSTREAM}\` |"
+            echo "| ref | \`${{ steps.cfg.outputs.ref }}\` |"
+            echo "| commit | \`${{ steps.up.outputs.sha }}\` |"
+            echo "| skills | ${{ steps.vendor.outputs.skills }} |"
+            echo "| agents | ${{ steps.vendor.outputs.agents }} |"
+            echo "| instructions | ${{ steps.vendor.outputs.instr }} |"
+            echo "| missing | ${{ steps.vendor.outputs.missing }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

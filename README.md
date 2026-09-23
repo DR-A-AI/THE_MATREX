@@ -92,6 +92,19 @@ python IGNITE_MATRIX.bat  # Windows
 bash ./IGNITE_MATRIX.sh   # Linux/Mac (if available)
 ```
 
+### CLI
+
+The same operations are available through the `matrix` command:
+
+```bash
+python -m cli check
+python -m cli dashboard-build
+python -m cli run
+```
+
+After installing the project with `pip install -e .`, use `matrix` instead of
+`python -m cli`.
+
 ---
 
 ## 🚢 Deployment Instructions

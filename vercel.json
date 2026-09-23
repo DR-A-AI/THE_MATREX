@@ -1,5 +1,7 @@
 {
-  "buildCommand": "cd dashboard && npm install && npm run build",
+  "installCommand": "npm ci --prefix dashboard",
+  "buildCommand": "npm run build --prefix dashboard",
   "outputDirectory": "dashboard/dist",
-  "framework": "vite"
+  "framework": "vite",
+  "cleanUrls": true
 }

@@ -24,6 +24,9 @@ dependencies = [
     "anthropic>=0.7.0",
 ]
 
+[project.scripts]
+matrix = "cli.main:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
@@ -35,7 +38,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["core", "services", "agents", "config", "skills"]
+packages = ["cli", "core", "services", "agents", "config", "skills"]
 
 [tool.black]
 line-length = 100
@@ -50,6 +53,3 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=. --cov-report=html --cov-report=term-missing"
-
-[tool.vercel]
-entrypoint = "services.ui_bridge:app"

@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "components": [
+    "Microsoft.VisualStudio.Workload.Python",
+    "Microsoft.VisualStudio.Workload.Node",
+    "Microsoft.VisualStudio.Workload.Azure",
+    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+    "Microsoft.VisualStudio.Component.Windows11SDK.22621"
+  ],
+  "extensions": [
+    "Microsoft.VisualStudio.Azure.ConnectedService",
+    "Microsoft.VisualStudio.Azure.Containers.Tools",
+    "Microsoft.VisualStudio.LiveShare"
+  ]
+}

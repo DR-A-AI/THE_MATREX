@@ -1,0 +1,56 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Python: install dependencies",
+      "type": "shell",
+      "windows": {
+        "command": "python -m pip install -r requirements.txt"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dashboard: install dependencies",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}/dashboard"
+      },
+      "windows": {
+        "command": "npm.cmd ci"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dashboard: build",
+      "type": "shell",
+      "dependsOn": "Dashboard: install dependencies",
+      "options": {
+        "cwd": "${workspaceFolder}/dashboard"
+      },
+      "windows": {
+        "command": "npm.cmd run build"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: pytest",
+      "type": "shell",
+      "windows": {
+        "command": "python -m pytest -q"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Matrix: start engine",
+      "type": "shell",
+      "windows": {
+        "command": "python matrix_main.py"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Matrix engine",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/matrix_main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "subProcess": true
+    },
+    {
+      "name": "UI bridge",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "services.ui_bridge:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000",
+        "--reload"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Dashboard (Vite)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/dashboard"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Matrix full stack",
+      "configurations": [
+        "UI bridge",
+        "Dashboard (Vite)",
+        "Matrix engine"
+      ],
+      "stopAll": true
+    }
+  ]
+}

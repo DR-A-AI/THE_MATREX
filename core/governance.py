@@ -1,19 +1,25 @@
-import os
-import uuid
 import asyncio
 import logging
+import os
+import uuid
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("Matrix.Governance")
+
 
 class SovereignGovernance:
     """
     Absolute HitL (Human-in-the-Loop) Governance Layer.
     Intercepts dangerous tool executions and mandates explicit Sovereign Commander approval.
     """
-    GOVERNANCE_DIR = r"J:\THE_MATRIX\governance"
+
+    GOVERNANCE_DIR = str(Path(os.getenv("MATRIX_ROOT", str(Path.cwd()))) / "governance")
 
     @classmethod
-    async def request_permission(cls, agent_name: str, tool_name: str, args: dict, client, correlation_id: str) -> bool:
+    async def request_permission(
+        cls, agent_name: str, tool_name: str, args: dict[str, Any], client: Any, correlation_id: str
+    ) -> bool:
         """
         Pauses execution and asks Commander for permission.
         Returns True if APPROVED, False if REJECTED or TIMEOUT.
@@ -23,23 +29,29 @@ class SovereignGovernance:
 
         os.makedirs(cls.GOVERNANCE_DIR, exist_ok=True)
         req_id = str(uuid.uuid4())[:8]
-        
+
         req_file = os.path.join(cls.GOVERNANCE_DIR, f"PENDING_{req_id}.txt")
         approved_file = os.path.join(cls.GOVERNANCE_DIR, f"APPROVED_{req_id}.txt")
         rejected_file = os.path.join(cls.GOVERNANCE_DIR, f"REJECTED_{req_id}.txt")
-        
-        with open(req_file, "w", encoding="utf-8") as f:
-            f.write(f"AGENT: {agent_name}\n")
-            f.write(f"TOOL: {tool_name}\n")
-            f.write(f"ARGS: {args}\n")
+
+        def _write_req_file() -> None:
+            with open(req_file, "w", encoding="utf-8") as f:
+                f.write(f"AGENT: {agent_name}\n")
+                f.write(f"TOOL: {tool_name}\n")
+                f.write(f"ARGS: {args}\n")
+
+        await asyncio.to_thread(_write_req_file)
 
         # Notify the Commander
-        from core.models import EventType, EventPayload
+        from core.models import EventPayload, EventType
+
         reply = EventPayload(
             event_type=EventType.STATE_UPDATE,
             source_agent_id=agent_name,
             correlation_id=correlation_id,
-            payload={"message": f"🚨 [GOVERNANCE LOCK] {agent_name} wants to use '{tool_name}'.\nAwaiting Commander approval (ID: {req_id}).\nCheck folder: {cls.GOVERNANCE_DIR}\nRename PENDING_{req_id}.txt to APPROVED_{req_id}.txt to allow, or REJECTED_{req_id}.txt to deny."}
+            payload={
+                "message": f"🚨 [GOVERNANCE LOCK] {agent_name} wants to use '{tool_name}'.\nAwaiting Commander approval (ID: {req_id}).\nCheck folder: {cls.GOVERNANCE_DIR}\nRename PENDING_{req_id}.txt to APPROVED_{req_id}.txt to allow, or REJECTED_{req_id}.txt to deny."
+            },
         )
         if client:
             await client.send(reply)

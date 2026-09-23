@@ -9,3 +9,12 @@ scratch/
 request_monitor.log
 output.txt
 services/node_modules/
+# local key backups (never commit)
+.env.bak-oldkey
+# local IDE / workspace state
+.vs/
+# test coverage artifacts (generated at runtime, not committed)
+.coverage
+htmlcov/
+# SQLite memory databases (generated at runtime)
+*.db

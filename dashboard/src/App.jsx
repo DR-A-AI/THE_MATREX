@@ -1,4 +1,3 @@
-import React from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { MessageSquare, Activity } from 'lucide-react';
 import { UserButton, SignedIn, SignedOut, useUser } from '@clerk/clerk-react';

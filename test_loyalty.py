@@ -1,9 +1,10 @@
 import asyncio
-import uuid
-import time
 import json
-from core.neural_bus import NeuralBusClient
+import uuid
+
 from core.models import EventPayload, EventType
+from core.neural_bus import NeuralBusClient
+
 
 async def test_agents():
     print("Initiating Loyalty and Capabilities Verification Protocol...")
@@ -67,10 +68,13 @@ async def test_agents():
     
     print("\nVerification Complete.")
     await client.stop()
-    
-    # Save results
-    with open("loyalty_report.json", "w", encoding="utf-8") as f:
-        json.dump(responses, f, ensure_ascii=False, indent=4)
+
+    # Save results without blocking the event loop
+    def _save_report() -> None:
+        with open("loyalty_report.json", "w", encoding="utf-8") as f:
+            json.dump(responses, f, ensure_ascii=False, indent=4)
+
+    await asyncio.to_thread(_save_report)
 
 if __name__ == "__main__":
     import sys

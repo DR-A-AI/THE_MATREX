@@ -2,15 +2,17 @@
 # Pydantic Models for Message Types & State
 # ==============================================================================
 
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Any, Optional, Dict, List, Union
-from enum import Enum
 from datetime import datetime, timezone
+from enum import Enum
 
-SafeValue = Union[str, int, float, bool, None, list, dict]
+from pydantic import BaseModel, ConfigDict, Field
+
+SafeValue = str | int | float | bool | None | list | dict
+
 
 class EventType(str, Enum):
     """Valid event types in the neural bus"""
+
     TASK_QUEUED = "task_queued"
     TASK_STARTED = "task_started"
     TASK_COMPLETED = "task_completed"
@@ -23,7 +25,7 @@ class EventType(str, Enum):
     SKILL_INJECT = "skill_inject"
     SKILL_REQUEST = "skill_request"
     KEY_INJECT = "key_inject"
-    TOKEN_EXTRACTED = "token_extracted"
+    TOKEN_EXTRACTED = "token_extracted"  # nosec: B105  # event-type enum value, not a credential
     ERROR = "error"
     SOVEREIGN_OVERRIDE = "sovereign_override"
     USER_COMMAND = "user_command"
@@ -32,8 +34,10 @@ class EventType(str, Enum):
     MEMORY_INJECT = "memory_inject"
     MEMORY_STORED = "memory_stored"
 
+
 class AgentState(str, Enum):
     """FSM States for agents"""
+
     IDLE = "idle"
     ACTIVE = "active"
     BLOCKED = "blocked"
@@ -41,49 +45,59 @@ class AgentState(str, Enum):
     SOVEREIGN_OVERRIDE = "sovereign_override"
     TERMINATED = "terminated"
 
+
 class EventPayload(BaseModel):
     """Base event structure for ZMQ neural bus"""
+
     event_type: EventType
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source_agent_id: str
     correlation_id: str
-    payload: Dict[str, SafeValue]
-    metadata: Optional[Dict[str, str]] = None
-    
+    payload: dict[str, SafeValue]
+    metadata: dict[str, str] | None = None
+
     model_config = ConfigDict(use_enum_values=True)
+
 
 class TaskDefinition(BaseModel):
     """Task structure for agent execution"""
+
     task_id: str
     agent_type: str  # neo, morpheus, smith, trinity, oracle
     instructions: str
-    input_data: Dict[str, SafeValue]
+    input_data: dict[str, SafeValue]
     priority: int = 5
     timeout_seconds: int = 300
     retry_count: int = 3
     require_qc: bool = True
 
+
 class QASubmission(BaseModel):
     """QA artifact for review"""
+
     submission_id: str
     artifact_type: str  # code, text, plan
     content: str
     source_agent_id: str
     submission_time: datetime = Field(default_factory=datetime.utcnow)
-    metadata: Dict[str, SafeValue]
+    metadata: dict[str, SafeValue]
+
 
 class QAVerdict(BaseModel):
     """QA decision on artifact"""
+
     submission_id: str
     passed_static: bool
-    static_errors: List[str] = []
+    static_errors: list[str] = []
     passed_llm: bool
-    llm_feedback: Optional[str] = None
+    llm_feedback: str | None = None
     verdict: str  # APPROVED, REJECTED, NEEDS_REVISION
     confidence: float = Field(ge=0, le=1)
 
+
 class AgentHealthReport(BaseModel):
     """Agent health status"""
+
     agent_id: str
     state: AgentState
     cpu_usage_percent: float
@@ -93,8 +107,10 @@ class AgentHealthReport(BaseModel):
     error_count: int = 0
     is_alive: bool = True
 
+
 class SecretToken(BaseModel):
     """Auth vault token"""
+
     token_id: str
     scope: str
     created_at: datetime

@@ -1,6 +1,5 @@
-import React from 'react';
 import { 
-  CircularGaugeComponent, AxesDirective, AxisDirective, PointersDirective, PointerDirective, RangesDirective, RangeDirective, AnnotationsDirective, AnnotationDirective
+  CircularGaugeComponent, AxesDirective, AxisDirective, PointersDirective, PointerDirective, RangesDirective, RangeDirective
 } from '@syncfusion/ej2-react-circulargauge';
 import { 
   ChartComponent, SeriesCollectionDirective, SeriesDirective, Inject, SplineSeries, DateTime, Legend, Tooltip 

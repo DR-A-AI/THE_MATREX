@@ -1,11 +1,11 @@
 import asyncio
 import logging
-import uuid
 import sys
 import time
+import uuid
 
+from core.models import AgentState, EventPayload, EventType
 from core.neural_bus import NeuralBusClient
-from core.models import EventPayload, EventType, AgentState
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("LoadTest")
@@ -28,8 +28,8 @@ async def test_agent(agent_index: int, iterations: int):
             if i % 1000 == 0:
                 logger.info(f"{agent_id} sent {i} heartbeats")
                 
-    except Exception as e:
-        logger.error(f"{agent_id} error: {e}")
+    except Exception:
+        logger.exception(f"{agent_id} error")
     finally:
         await client.stop()
         

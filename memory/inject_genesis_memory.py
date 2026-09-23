@@ -1,6 +1,8 @@
 import json
+import logging
 import sqlite3
-import os
+
+logger = logging.getLogger(__name__)
 
 # Connect to the Matrix Memory DB (or create for each agent)
 agents = ['neo', 'trinity', 'morpheus', 'smith', 'oracle', 'base', 'aegis']
@@ -43,6 +45,7 @@ def build_memory_injector(agent_name):
             except json.JSONDecodeError:
                 continue
             except Exception as e:
+                logger.exception(f"Error parsing line for {agent_name}")
                 print(f"Error parsing line for {agent_name}: {e}")
                 
     conn.commit()

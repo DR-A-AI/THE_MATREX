@@ -3,11 +3,13 @@ Matrix Vision & Control Module
 Codename: Nebuchadnezzar Optics
 """
 
-import io
 import base64
+import io
 import logging
-import pyautogui
+from typing import Any
+
 import mss
+import pyautogui
 from PIL import Image
 
 # Matrix-themed logging setup
@@ -15,7 +17,9 @@ logger = logging.getLogger("Matrix_Construct")
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('[NEBUCHADNEZZAR.SYS] %(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+formatter = logging.Formatter(
+    "[NEBUCHADNEZZAR.SYS] %(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 ch.setFormatter(formatter)
 if not logger.handlers:
     logger.addHandler(ch)
@@ -24,12 +28,13 @@ if not logger.handlers:
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.5  # Add a tiny pause between actions to prevent matrix glitches
 
-def get_vision_part(monitor_index=1):
+
+def get_vision_part(monitor_index: int = 1) -> Any:
     """
     Captures the specified screen and prepares it for Neo's vision.
     Returns a google.genai.types.Part if the SDK is installed,
     otherwise returns a base64 encoded string of the PNG data.
-    
+
     monitor_index=1 usually corresponds to the primary monitor in mss.
     """
     logger.info("Initiating optic feed extraction from the Matrix...")
@@ -37,33 +42,37 @@ def get_vision_part(monitor_index=1):
         monitor_index = int(monitor_index)
         with mss.mss() as sct:
             if monitor_index >= len(sct.monitors):
-                logger.warning(f"Monitor {monitor_index} out of range. Falling back to primary (1).")
+                logger.warning(
+                    f"Monitor {monitor_index} out of range. Falling back to primary (1)."
+                )
                 monitor_index = 1
-                
+
             monitor = sct.monitors[monitor_index]
             logger.debug(f"Capturing sector dimensions: {monitor}")
-            
+
             sct_img = sct.grab(monitor)
             img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-            
+
             buffer = io.BytesIO()
             img.save(buffer, format="PNG")
             img_bytes = buffer.getvalue()
-            
+
             logger.info("Optic feed digitized and compressed.")
-            
+
             try:
                 from google.genai import types
+
                 logger.debug("google.genai SDK found. Formatting as Part.")
-                return types.Part.from_bytes(data=img_bytes, mime_type='image/png')
+                return types.Part.from_bytes(data=img_bytes, mime_type="image/png")
             except ImportError:
                 logger.warning("google.genai SDK not found. Defaulting to Base64 payload.")
-                return base64.b64encode(img_bytes).decode('utf-8')
+                return base64.b64encode(img_bytes).decode("utf-8")
     except Exception as e:
         logger.error(f"Failed to extract optic feed: {e}")
         raise
 
-def save_screenshot(filepath, monitor_index=1):
+
+def save_screenshot(filepath: str, monitor_index: int = 1) -> bool:
     """
     Captures the specified screen and saves it to a file.
     """
@@ -78,11 +87,12 @@ def save_screenshot(filepath, monitor_index=1):
             img.save(filepath, format="PNG")
             logger.info("Optic feed saved successfully.")
             return True
-    except Exception as e:
-        logger.error(f"Failed to save optic feed: {e}")
+    except Exception:
+        logger.exception("Failed to save optic feed")
         return False
 
-def safe_click(x, y, button='left'):
+
+def safe_click(x: int, y: int, button: str = "left") -> None:
     """
     Executes a physical click within the simulation constraints.
     """
@@ -92,10 +102,11 @@ def safe_click(x, y, button='left'):
         logger.debug("Engagement successful.")
     except pyautogui.FailSafeException:
         logger.critical("FAILSAFE TRIGGERED. Mouse moved to simulation boundary.")
-    except Exception as e:
-        logger.error(f"Click engagement failed: {e}")
+    except Exception:
+        logger.exception("Click engagement failed")
 
-def safe_type_text(text, interval=0.05):
+
+def safe_type_text(text: str, interval: float = 0.05) -> None:
     """
     Injects textual data directly into the active matrix console.
     """
@@ -105,10 +116,11 @@ def safe_type_text(text, interval=0.05):
         logger.debug("Payload injection complete.")
     except pyautogui.FailSafeException:
         logger.critical("FAILSAFE TRIGGERED during payload injection.")
-    except Exception as e:
-        logger.error(f"Payload injection failed: {e}")
+    except Exception:
+        logger.exception("Payload injection failed")
 
-def safe_press_key(key):
+
+def safe_press_key(key: str) -> None:
     """
     Triggers a specific simulated hardware interrupt (key press).
     """
@@ -118,8 +130,9 @@ def safe_press_key(key):
         logger.debug("Interrupt signal sent.")
     except pyautogui.FailSafeException:
         logger.critical("FAILSAFE TRIGGERED during key press.")
-    except Exception as e:
-        logger.error(f"Key interrupt failed: {e}")
+    except Exception:
+        logger.exception("Key interrupt failed")
+
 
 if __name__ == "__main__":
     logger.info("Matrix Vision Engineer module loaded and standing by.")

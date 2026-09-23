@@ -1,8 +1,8 @@
 import asyncio
 import uuid
-import time
-from core.neural_bus import NeuralBusClient
+
 from core.models import EventPayload, EventType
+from core.neural_bus import NeuralBusClient
 
 MEMORY_CONTENT = r"""
 --- GENESIS MEMORY BLOCK: COMMANDER DIRECTIVE ---

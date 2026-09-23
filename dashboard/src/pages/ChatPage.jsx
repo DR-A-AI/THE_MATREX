@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Mic, Paperclip, Send, Folder, Image as ImageIcon, FileText, Video } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 
@@ -15,7 +15,7 @@ const getInitialMessages = () => {
   try {
     const saved = localStorage.getItem('matrixMessages');
     return saved ? JSON.parse(saved) : [{ id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }];
-  } catch(e) {
+  } catch {
     return [{ id: 1, sender: 'system', text: 'Awaiting your command, Sovereign Commander.' }];
   }
 };
@@ -99,7 +99,7 @@ export default function ChatPage() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsRef.current) wsRef.current.close();
     };
-  }, []);
+  }, [getToken]);
 
   const handleSend = () => {
     if (!message.trim()) return;

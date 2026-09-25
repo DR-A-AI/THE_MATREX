@@ -11,6 +11,7 @@ output.txt
 services/node_modules/
 # local key backups (never commit)
 .env.bak-oldkey
+Syncfusion-license-key.env
 # local IDE / workspace state
 .vs/
 # test coverage artifacts (generated at runtime, not committed)
@@ -18,3 +19,10 @@ services/node_modules/
 htmlcov/
 # SQLite memory databases (generated at runtime)
 *.db
+# Runtime logs (generated, never commit — evidence lives in Handover/evidence/)
+logs/
+engine*.log
+final_test*.log
+ollama_wsl.log
+# Build artifacts
+obj/

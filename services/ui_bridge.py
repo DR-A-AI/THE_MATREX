@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 
 # Set loop policy BEFORE anything else to fix ZMQ on Windows
 if sys.platform == "win32":
@@ -19,8 +20,11 @@ import json
 import logging
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv()
 
 from core.models import EventPayload, EventType
 from core.neural_bus import NeuralBusClient
@@ -34,25 +38,31 @@ try:
 
     JWT_AVAILABLE = True
 except ImportError:
+    jwt = None  # type: ignore[assignment]
     JWT_AVAILABLE = False
     logger.critical(
         "PyJWT not installed. Clerk validation will fail. Run: pip install PyJWT cryptography"
     )
 
-CLERK_PEM_PUBLIC_KEY = os.getenv("CLERK_PEM_PUBLIC_KEY", "")
+CLERK_PEM_PUBLIC_KEY = os.getenv("CLERK_PEM_PUBLIC_KEY", "").replace("\\n", "\n")
+COMMANDER_AUTH_TOKEN = os.getenv("COMMANDER_AUTH_TOKEN", "")
 
 
 def verify_clerk_token(token: str) -> bool:
     if not token:
-        logger.critical("SECURITY LEAK: No Clerk token provided by frontend!")
+        logger.critical("SECURITY LEAK: No token provided by frontend!")
         return False
 
-    if not JWT_AVAILABLE:
+    if COMMANDER_AUTH_TOKEN and token == COMMANDER_AUTH_TOKEN:
+        logger.info("Local Sovereign Commander authenticated via local auth token.")
+        return True
+
+    if not JWT_AVAILABLE or jwt is None:
         logger.critical("SECURITY LEAK: PyJWT not installed. Cannot verify token! Denying access.")
         return False
 
     if not CLERK_PEM_PUBLIC_KEY:
-        logger.critical("SECURITY WARNING: CLERK_PEM_PUBLIC_KEY is missing! Enforcing strict deny.")
+        logger.warning("CLERK_PEM_PUBLIC_KEY is missing! Enforcing strict deny on cloud token.")
         return False
 
     try:
@@ -142,6 +152,16 @@ app.add_middleware(
 )
 
 
+@app.get("/api/health")
+async def health_check() -> dict[str, Any]:
+    return {
+        "status": "online",
+        "bus_connected": bus_client is not None,
+        "zmq_router": os.getenv("ZMQ_ROUTER_URL", "tcp://127.0.0.1:5555"),
+        "timestamp": time.time(),
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
@@ -176,7 +196,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 event_type=EventType.USER_COMMAND,
                 source_agent_id="Commander_UI",
                 correlation_id=str(int(time.time())),
-                payload={"target_agent": target_agent, "message": user_text},
+                payload={
+                    "target_agent": target_agent,
+                    "message": user_text,
+                    # Commander proof: agents compare against COMMANDER_AUTH_TOKEN.
+                    # Bus is HMAC-signed; token never leaves signed localhost frames.
+                    "commander_token": COMMANDER_AUTH_TOKEN,
+                },
             )
             if bus_client is not None:
                 await bus_client.send(event)
@@ -194,12 +220,11 @@ def run_bridge() -> None:
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     uvicorn.run(
-        "services.ui_bridge:app",
+        app,
         # Localhost default; set UI_HOST or HOST to 0.0.0.0 to opt into all interfaces.
         host=os.getenv("UI_HOST", os.getenv("HOST", "127.0.0.1")),
         port=int(os.getenv("UI_PORT", "8000")),
         reload=False,
-        loop="asyncio",
     )
 
 

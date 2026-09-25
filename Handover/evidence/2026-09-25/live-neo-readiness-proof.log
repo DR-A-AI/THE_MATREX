@@ -1,0 +1,14 @@
+# Live E2E proof — Neo readiness reply via Neural Bus (no mocks)
+Date: 2026-09-25T15:18:01Z | Engine PID: 13256 (restarted with Groq env 001..004)
+Probe: USER_COMMAND from Commander_UI to neo, payload={'command':'جاهز؟','target_agent':'neo'}
+
+Reply (STATE_UPDATE from neo, Arabic, deterministic telemetry, zero LLM wait):
+نعم أيها القائد، أنا جاهز — Neo متصل الآن.
+• الباص العصبي (127.0.0.1:5555): متصل ✅
+• Ollama (http://127.0.0.1:11434): v0.34.4
+• الجسر (127.0.0.1:8000): متصل ✅
+• اللوحة (127.0.0.1:5173): متصل ✅
+
+Checks: BANNED_HIT=NONE (no hypothetical/simplified example/started again), HAS_TELEMETRY=True
+Root cause fixed: payload field mismatch (command vs message) + status route ordering/tie-break.
+Regression test: tests/test_neo_status_command_field.py (39/39 scope-green, 163+1 full suite green per reviewer run).

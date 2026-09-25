@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import time
+from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,14 @@ import zmq.asyncio
 from core.models import EventPayload
 
 logger = logging.getLogger("Sovereign.NeuralBus")
+
+
+# Router zero-trust gates (C6 hardening).
+MAX_FRAME_BYTES = 1_048_576  # 1 MiB — oversized frames are dropped, never broadcast
+FLOOD_MAX_MSGS = 300  # per-sender messages ...
+FLOOD_WINDOW_SEC = 5.0
+FLOOD_COOLDOWN_SEC = 10.0
+FRAME_TTL_SEC = 60.0
 
 
 # Pre-shared Sovereign Key - MUST be injected via environment
@@ -147,6 +156,49 @@ class NeuralBusRouter:
         self.socket.setsockopt(zmq.ROUTER_MANDATORY, 1)
         self.active_clients: set[bytes] = set()
         self._running = False
+        self._sender_hits: dict[bytes, deque[float]] = {}
+        self._sender_muted_until: dict[bytes, float] = {}
+
+    def _valid_signature(self, signature: bytes, msg_bytes: bytes) -> bool:
+        """HMAC-SHA256 gate: True only for frames signed with BUS_SECRET."""
+        try:
+            signature_str = signature.decode("utf-8")
+        except (UnicodeDecodeError, AttributeError):
+            return False
+        if not signature_str:
+            return False
+        expected = hmac.new(BUS_SECRET, msg_bytes, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature_str)
+
+    def _acceptable_size(self, msg_bytes: bytes) -> bool:
+        return len(msg_bytes) <= MAX_FRAME_BYTES
+
+    def _fresh_enough(self, msg_bytes: bytes) -> bool:
+        """TTL gate: sender timestamp must be within FRAME_TTL_SEC."""
+        try:
+            ts = float(json.loads(msg_bytes.decode("utf-8")).get("timestamp", 0))
+        except (ValueError, AttributeError, UnicodeDecodeError):
+            return False
+        return 0 <= time.time() - ts <= FRAME_TTL_SEC
+
+    def _flood_ok(self, sender: bytes) -> bool:
+        """Sliding-window flood guard with cooldown mute."""
+        now = time.time()
+        if now < self._sender_muted_until.get(sender, 0.0):
+            return False
+        hits = self._sender_hits.setdefault(sender, deque())
+        while hits and now - hits[0] > FLOOD_WINDOW_SEC:
+            hits.popleft()
+        hits.append(now)
+        if len(hits) > FLOOD_MAX_MSGS:
+            self._sender_muted_until[sender] = now + FLOOD_COOLDOWN_SEC
+            logger.warning(
+                "NeuralBus Router flood-muted %s for %.0fs.",
+                sender.decode(errors="replace"),
+                FLOOD_COOLDOWN_SEC,
+            )
+            return False
+        return True
 
     async def start(self) -> None:
         # Enable address reuse to allow fast restart after crashes
@@ -166,6 +218,35 @@ class NeuralBusRouter:
 
                     # If it's a registration frame, do not broadcast
                     if signature == b"REGISTER":
+                        continue
+
+                    # Zero-trust gates: HMAC, then size, TTL, flood. A frame
+                    # failing any gate is dropped — never broadcast — so one
+                    # bad sender can neither storm agents nor replay stale
+                    # traffic. Defense in depth: clients re-verify on receipt.
+                    if not self._valid_signature(signature, msg_bytes):
+                        logger.warning(
+                            "NeuralBus Router dropped unsigned/invalid frame "
+                            "from %s (not broadcast).",
+                            sender.decode(errors="replace"),
+                        )
+                        continue
+                    if not self._acceptable_size(msg_bytes):
+                        logger.warning(
+                            "NeuralBus Router dropped oversized frame (%d bytes) "
+                            "from %s (not broadcast).",
+                            len(msg_bytes),
+                            sender.decode(errors="replace"),
+                        )
+                        continue
+                    if not self._fresh_enough(msg_bytes):
+                        logger.warning(
+                            "NeuralBus Router dropped stale frame from %s "
+                            "(TTL expired, not broadcast).",
+                            sender.decode(errors="replace"),
+                        )
+                        continue
+                    if not self._flood_ok(sender):
                         continue
 
                     # Broadcast to all other active clients

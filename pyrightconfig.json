@@ -1,8 +1,8 @@
 {
-  "venvPath": "/mnt/e/matrex-dev",
+  "venvPath": ".",
   "venv": ".venv",
   "extraPaths": [
-    "/mnt/e/matrex-dev"
+    "."
   ],
   "pythonVersion": "3.10"
 }

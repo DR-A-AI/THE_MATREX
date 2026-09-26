@@ -38,7 +38,7 @@ echo ""
 echo "[4/5] Testing individual services..."
 echo ""
 echo "  Testing UI Bridge (FastAPI on 8000)..."
-SOVEREIGN_BUS_SECRET=sovereign_terminal_key_2026_matrix_secure timeout 3 $PYTHON_BIN services/ui_bridge.py 2>&1 | head -5 && echo "    ✅ Starts successfully" || echo "    ⚠️ Check error above"
+SOVEREIGN_BUS_SECRET="${SOVEREIGN_BUS_SECRET:?SOVEREIGN_BUS_SECRET must come from .env}"  # sanitized 2026-09-26, was hardcoded live secret timeout 3 $PYTHON_BIN services/ui_bridge.py 2>&1 | head -5 && echo "    ✅ Starts successfully" || echo "    ⚠️ Check error above"
 echo ""
 
 # Check 5: Firewall

@@ -2,11 +2,13 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
+const MATRIX_ROOT = process.env.MATRIX_ROOT || path.resolve(__dirname, '..');
+
 (async () => {
     console.log("[MATRIX] Initializing Clerk Auto-Extractor (Visible Mode)...");
     const url = "https://dashboard.clerk.com/apps/app_3Ey9xHngR8HylzTvX9h5FyeNE8x/instances/ins_3Ey9xCNeMZ6xpqsXX1cunebcntz/api-keys";
     
-    const userDataDir = "J:\\THE_MATRIX\\chrome_temp";
+    const userDataDir = path.join(MATRIX_ROOT, "chrome_temp");
     const executablePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
     let browser;
@@ -27,7 +29,7 @@ const path = require('path');
         console.log("[MATRIX] Waiting 10 seconds for Cloudflare/Login to settle...");
         await new Promise(r => setTimeout(r, 10000));
 
-        await page.screenshot({ path: "J:\\THE_MATRIX\\scratch\\clerk_vision.png", fullPage: true });
+        await page.screenshot({ path: path.join(MATRIX_ROOT, "scratch", "clerk_vision.png"), fullPage: true });
         console.log("[MATRIX] Screenshot saved. Scanning DOM...");
 
         const bodyText = await page.evaluate(() => document.body.innerText);
@@ -39,7 +41,7 @@ const path = require('path');
             const pk = pkMatch[0];
             console.log(`[SUCCESS] Publishable Key extracted: ${pk.substring(0, 15)}...`);
             
-            const envPath = path.join('J:', 'THE_MATRIX', 'dashboard', '.env');
+            const envPath = path.join(MATRIX_ROOT, 'dashboard', '.env');
             let envContent = fs.readFileSync(envPath, 'utf8');
             
             if (envContent.includes('VITE_CLERK_PUBLISHABLE_KEY=')) {

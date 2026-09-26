@@ -4,6 +4,7 @@
 
 # ZMQ & IPC
 pyzmq>=25.1.0
+tornado>=6.1
 
 # Data Validation & Serialization
 pydantic>=2.5.0
@@ -51,3 +52,18 @@ tenacity>=8.2.3
 # Security
 cryptography>=41.0.7
 PyJWT>=2.8.0
+
+# Async File I/O
+aiofiles>=23.2.1
+
+# Web API
+fastapi>=0.109.0
+uvicorn>=0.25.0
+
+# Google AI
+google-genai>=1.0.0
+
+# Vision & Serialization (imported by core/zmq_hooks.py, core/matrix_vision.py)
+msgpack>=1.2.2
+Pillow>=12.3.0
+mss>=10.2.0

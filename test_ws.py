@@ -1,7 +1,11 @@
 import asyncio
-import websockets
 import json
+import logging
 import sys
+
+import websockets
+
+logger = logging.getLogger(__name__)
 
 # Fix encoding error for printing Arabic text in Windows console
 if sys.platform == 'win32':
@@ -41,6 +45,7 @@ async def test_frontend_backend_connection():
                     continue
                     
     except Exception as e:
+        logger.exception("Connection failed")
         print(f"Connection failed: {e}")
 
 if __name__ == "__main__":

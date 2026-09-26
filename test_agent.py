@@ -1,11 +1,10 @@
 import asyncio
 import logging
-import uuid
 import sys
-from datetime import datetime
+import uuid
 
+from core.models import AgentState, EventPayload, EventType
 from core.neural_bus import NeuralBusClient
-from core.models import EventPayload, EventType, AgentState
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("TestAgent")
@@ -48,8 +47,8 @@ async def main():
                 
             await asyncio.sleep(1)
             
-    except Exception as e:
-        logger.error(f"Error in test agent: {e}")
+    except Exception:
+        logger.exception("Error in test agent")
     finally:
         await client.stop()
         logger.info("Test Agent shutting down.")

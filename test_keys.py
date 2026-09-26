@@ -1,6 +1,10 @@
+import logging
 import warnings
+
 warnings.filterwarnings('ignore')
 import google.generativeai as genai
+
+logger = logging.getLogger(__name__)
 
 keys = {
     'NEO_PRIMARY_KEY':      'AIzaSyDP7qkd2fVBn9qsnMPhffE6I-zFIQMuPwE',
@@ -24,6 +28,7 @@ for key_name, key in keys.items():
             print(f"  [OK] {model_name} -> {resp.text.strip()[:40]}")
             break  # found working model
         except Exception as e:
+            logger.exception(f"Model {model_name} check failed")
             err = str(e)
             if '429' in err:
                 print(f"  [429] {model_name} -> quota hit")

@@ -1,5 +1,10 @@
 import asyncio
+import logging
+
 from playwright.async_api import async_playwright
+
+logger = logging.getLogger(__name__)
+
 
 async def run():
     async with async_playwright() as p:
@@ -13,7 +18,8 @@ async def run():
             try:
                 await page.goto("http://localhost:5173", timeout=5000)
                 break
-            except Exception as e:
+            except Exception:
+                logger.exception("Vite not ready yet, retrying")
                 print(f"Vite not ready yet, retrying... ({i+1}/10)")
                 await asyncio.sleep(2)
                 
@@ -28,7 +34,7 @@ async def run():
             await page.locator("input[type='password']").fill("password123")
             await page.locator("button[type='submit']").click()
             
-            # Wait for login to complete (it has a ~6s fake delay + reload)
+            # Wait for login authentication and navigation to complete
             print("Waiting for handshake...")
             await asyncio.sleep(8)
             await page.wait_for_selector("input[placeholder='Transmit command...']", timeout=15000)

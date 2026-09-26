@@ -1,13 +1,17 @@
 import json
+import logging
 import sqlite3
-import os
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Connect to the Matrix Memory DB (or create for each agent)
 agents = ['neo', 'trinity', 'morpheus', 'smith', 'oracle', 'base', 'aegis']
-memory_source = "J:\\THE_MATRIX\\memory\\genesis_memory.jsonl"
+memory_dir = Path(__file__).resolve().parent
+memory_source = memory_dir / "genesis_memory.jsonl"
 
 def build_memory_injector(agent_name):
-    db_path = f"J:\\THE_MATRIX\\memory\\{agent_name}_memory.db"
+    db_path = memory_dir / f"{agent_name}_memory.db"
     
     # Create the sqlite schema used by the Matrix agents
     conn = sqlite3.connect(db_path)
@@ -43,6 +47,7 @@ def build_memory_injector(agent_name):
             except json.JSONDecodeError:
                 continue
             except Exception as e:
+                logger.exception(f"Error parsing line for {agent_name}")
                 print(f"Error parsing line for {agent_name}: {e}")
                 
     conn.commit()

@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "io.github.ChromeDevTools/chrome-devtools-mcp": {
+      "args": [
+        "E:\\Servers-Center\\servers\\mcp\\chrome-devtools\\node_modules\\chrome-devtools-mcp\\build\\src\\bin\\chrome-devtools-mcp.js",
+        "--headless",
+        "--isolated"
+      ],
+      "type": "stdio",
+      "command": "E:\\Servers-Center\\runtime\\node-v24.19.0-win-x64\\node.exe"
+    }
+  },
+  "inputs": []
+}

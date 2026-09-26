@@ -1,5 +1,4 @@
-import React from 'react';
-import { SignIn } from '@clerk/clerk-react';
+import { SignIn } from '../auth/SovereignAuth';
 import { Shield } from 'lucide-react';
 
 export default function LoginPage() {

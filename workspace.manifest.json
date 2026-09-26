@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "workspace_id": "matrix-v2-wsl",
+  "root": "/mnt/e/matrex-dev",
+  "canonical": true,
+  "components": {
+    "brain": "services",
+    "runtime": "services",
+    "skills": ".agents/skills",
+    "memory": "knowledge.db"
+  },
+  "model": {
+    "provider": "ollama",
+    "base_url_env": "OLLAMA_HOST",
+    "default_base_url": "http://127.0.0.1:11434"
+  },
+  "mcp_gateway": {
+    "timeout_seconds": 15,
+    "max_output_bytes": 65536,
+    "servers": {
+      "shell": {
+        "enabled": true,
+        "command": [
+          "/usr/bin/node",
+          "/mnt/k/mcp/shell/server.js"
+        ]
+      },
+      "chrome_devtools": {
+        "enabled": false,
+        "command": [
+          "/usr/bin/node",
+          "/mnt/k/mcp/chrome-devtools/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+          "--headless", "--isolated",
+          "--workspace", "/mnt/e/matrex-dev"
+        ]
+      },
+      "syncfusion": {
+        "enabled": false,
+        "command": [
+          "/usr/bin/node",
+          "/mnt/k/mcp/syncfusion/server.js"
+        ]
+      },
+      "github": {
+        "enabled": false,
+        "command": [
+          "/usr/bin/node",
+          "/mnt/k/mcp/github/server.js"
+        ],
+        "max_output_bytes": 1048576,
+        "environment": {"GITHUB_PERSONAL_ACCESS_TOKEN": "GH_TOKEN_REF"}
+      }
+    }
+  }
+}

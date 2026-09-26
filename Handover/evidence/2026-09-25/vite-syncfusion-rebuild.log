@@ -1,0 +1,43 @@
+# vite-syncfusion-rebuild — 2026-09-25 (FRONTEND ONLY, no secrets)
+# Task: unify dashboard/.env to approved license + safe main.jsx + rebuild
+
+BUILD_CMD: bun run build  (vite build, VITE_* inlined at build time)
+BUILD_START_UTC: 2026-09-25T14:00:17Z
+BUILD_END_UTC: 2026-09-25T14:00:28Z
+VITE_RESULT: built in 8.95s (wall 11s), exit=0
+VITE_VERSION: v8.0.16, modules=2475 transformed
+
+OUTPUT (from vite reporter):
+dist/index.html                   0.49 kB | gzip:   0.31 kB
+dist/assets/index-BEZ8zIlU.css  355.70 kB | gzip: 136.49 kB
+dist/assets/index-BUlHkDNh.js  1732.76 kB | gzip: 457.52 kB
+
+DIST_SIZES (du/ls):
+dist total: 2.9M (2982384 bytes)
+dist/assets/index-BUlHkDNh.js: 1.7M (1732764 bytes)
+dist/assets/index-BEZ8zIlU.css: 348K (355702 bytes)
+dist/index.html: 492 bytes
+favicon.svg: 9.3K, icons.svg: 5.0K, matrix_vision_*.png: 208K/213K/212K/227K
+
+FINGERPRINTS (masked, sha16 only — no values printed):
+approved_src=/mnt/e/matrex-dev/Syncfusion-license-key.env var=Syncfusion-license-key len=92 sha16=b262baf263147941
+dashboard_env=VITE_SYNCFUSION_LICENSE_KEY len=92 sha16=b262baf263147941 match=True
+old_bak=/.env.bak-oldkey len=88 sha16=2e28a05492b12128 match=False (old key)
+dashboard_example: empty (len=0) match=False
+
+MAIN.JSX CHECK:
+dashboard/src/main.jsx:3 import { registerLicense } from '@syncfusion/ej2-base' OK
+lines 9-14: const syncfusionLicense = import.meta.env.VITE_SYNCFUSION_LICENSE_KEY; if (...) registerLicense(...); else console.warn('[Syncfusion] ... missing ...'); OK
+behavior: silent skip when missing + console.warn only, no throw, no boot break. No other license calls.
+
+DIST vs SRC CHECK:
+src newest: dashboard/src/main.jsx 2026-09-25 06:59:41 -0700
+dist oldest: 2026-09-25 07:00:27 -0700, newest: 07:00:28 -0700
+result: PASS — all dist files newer than all src files, dist matches rebuilt src.
+
+BUILD WARNINGS (remaining):
+- [plugin builtin:vite-reporter] chunk >500kB after minification (1.7M JS) — code-split suggestion only, not license-related.
+- [PLUGIN_TIMINGS] rolldown:vite-resolve slow — info only.
+- No Syncfusion license error in build output (license is runtime-validated; key now embedded via VITE_*).
+
+SCOPE: frontend only. No *.py touched by this task. No commits. No secrets printed (values copied, *** masked).

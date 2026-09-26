@@ -1,7 +1,7 @@
 import enum
-import asyncio
-from typing import Callable, Dict, Any, Optional
-from services.librarian import SecureLibrarian
+from collections.abc import Callable
+from typing import Any
+
 
 class AgentState(enum.Enum):
     IDLE = "IDLE"
@@ -10,54 +10,57 @@ class AgentState(enum.Enum):
     WAITING = "WAITING"
     SOVEREIGN_OVERRIDE = "SOVEREIGN_OVERRIDE"
 
+
 class SovereignEngineFSM:
-    def __init__(self):
+    def __init__(self) -> None:
         self.current_state = AgentState.IDLE
-        self.state_handlers: Dict[AgentState, Callable] = {
+        self.state_handlers: dict[AgentState, Callable] = {
             AgentState.IDLE: self._handle_idle,
             AgentState.THINKING: self._handle_thinking,
             AgentState.ACTING: self._handle_acting,
             AgentState.WAITING: self._handle_waiting,
-            AgentState.SOVEREIGN_OVERRIDE: self._handle_sovereign_override
+            AgentState.SOVEREIGN_OVERRIDE: self._handle_sovereign_override,
         }
-        self.override_payload: Optional[Dict[str, Any]] = None
-        
+        self.override_payload: dict[str, Any] | None = None
+
         # The Librarian is now initialized centrally in matrix_main.py
         from core.neural_bus import NeuralBusClient
-        
+
         self.bus_client = NeuralBusClient(identity="Engine_FSM")
 
-    def _handle_idle(self, context: Dict[str, Any]):
+    def _handle_idle(self, context: dict[str, Any]) -> None:
         print("Engine is IDLE. Waiting for input...")
 
-    def _handle_thinking(self, context: Dict[str, Any]):
+    def _handle_thinking(self, context: dict[str, Any]) -> None:
         print("Engine is THINKING. Analyzing data...")
 
-    def _handle_acting(self, context: Dict[str, Any]):
+    def _handle_acting(self, context: dict[str, Any]) -> None:
         print("Engine is ACTING. Executing actions...")
 
-    def _handle_waiting(self, context: Dict[str, Any]):
+    def _handle_waiting(self, context: dict[str, Any]) -> None:
         print("Engine is WAITING for external events...")
 
-    def _handle_sovereign_override(self, context: Dict[str, Any]):
-        print(f"SOVEREIGN OVERRIDE ACTIVE. Bypassing normal FSM rules. Payload: {self.override_payload}")
+    def _handle_sovereign_override(self, context: dict[str, Any]) -> None:
+        print(
+            f"SOVEREIGN OVERRIDE ACTIVE. Bypassing normal FSM rules. Payload: {self.override_payload}"
+        )
         # Execute the absolute truth override command immediately,
         # ignoring standard constraints and transitioning.
 
-    def transition_to(self, new_state: AgentState):
+    def transition_to(self, new_state: AgentState) -> None:
         """Standard FSM state transition."""
         print(f"Transitioning from {self.current_state} to {new_state}")
         self.current_state = new_state
 
-    def trigger_override(self, payload: Dict[str, Any]):
+    def trigger_override(self, payload: dict[str, Any]) -> None:
         """
-        Agents or external watchdogs can call this to bypass normal FSM 
+        Agents or external watchdogs can call this to bypass normal FSM
         and immediately jump to SOVEREIGN_OVERRIDE state.
         """
         self.override_payload = payload
         self.transition_to(AgentState.SOVEREIGN_OVERRIDE)
 
-    def tick(self, context: Dict[str, Any]):
+    def tick(self, context: dict[str, Any]) -> None:
         """Run one iteration of the FSM."""
         handler = self.state_handlers.get(self.current_state)
         if handler:

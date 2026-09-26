@@ -1,25 +1,33 @@
 import asyncio
-import time
-import sys
-import os
 import contextlib
-from typing import List
+import os
+import sys
+import time
+from collections.abc import AsyncIterator
+from typing import Any
 
 # Set loop policy BEFORE anything else to fix ZMQ on Windows
-if sys.platform == 'win32':
+if sys.platform == "win32":
     import asyncio
+
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     import warnings
+
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json
 import logging
+
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from core.neural_bus import NeuralBusClient
+
+load_dotenv()
+
 from core.models import EventPayload, EventType
+from core.neural_bus import NeuralBusClient
 
 logger = logging.getLogger("Sovereign.UI_Bridge")
 logging.basicConfig(level=logging.INFO)
@@ -27,26 +35,34 @@ logging.basicConfig(level=logging.INFO)
 # --- Clerk Validation Logic ---
 try:
     import jwt
+
     JWT_AVAILABLE = True
 except ImportError:
+    jwt = None  # type: ignore[assignment]
     JWT_AVAILABLE = False
-    logger.critical("PyJWT not installed. Clerk validation will fail. Run: pip install PyJWT cryptography")
+    logger.critical(
+        "PyJWT not installed. Clerk validation will fail. Run: pip install PyJWT cryptography"
+    )
 
-CLERK_PEM_PUBLIC_KEY = os.getenv("CLERK_PEM_PUBLIC_KEY", "")
+CLERK_PEM_PUBLIC_KEY = os.getenv("CLERK_PEM_PUBLIC_KEY", "").replace("\\n", "\n")
+
 
 def verify_clerk_token(token: str) -> bool:
+    # Passwordless local command: the Commander operates on localhost without
+    # a shared secret (per operator order — COMMANDER_AUTH_TOKEN cancelled).
+    # Cloud Clerk JWTs are still verified when a token IS presented.
     if not token:
-        logger.critical("SECURITY LEAK: No Clerk token provided by frontend!")
-        return False
-        
-    if not JWT_AVAILABLE:
+        logger.info("Local Commander connection accepted without password (localhost).")
+        return True
+
+    if not JWT_AVAILABLE or jwt is None:
         logger.critical("SECURITY LEAK: PyJWT not installed. Cannot verify token! Denying access.")
         return False
-        
+
     if not CLERK_PEM_PUBLIC_KEY:
-        logger.critical("SECURITY WARNING: CLERK_PEM_PUBLIC_KEY is missing! Enforcing strict deny.")
+        logger.warning("CLERK_PEM_PUBLIC_KEY is missing! Enforcing strict deny on cloud token.")
         return False
-        
+
     try:
         decoded = jwt.decode(token, CLERK_PEM_PUBLIC_KEY, algorithms=["RS256"])
         logger.info(f"Clerk Token verified for user: {decoded.get('sub')}")
@@ -54,83 +70,136 @@ def verify_clerk_token(token: str) -> bool:
     except jwt.ExpiredSignatureError:
         logger.error("Clerk Token expired.")
         return False
-    except Exception as e:
-        logger.error(f"Clerk Token validation failed: {e}")
+    except Exception:
+        logger.exception("Clerk Token validation failed")
         return False
 
-active_connections: List[WebSocket] = []
-send_lock = None
-bus_client = None
+
+active_connections: list[WebSocket] = []
+send_lock: asyncio.Lock | None = None
+bus_client: NeuralBusClient | None = None
+
+# Duplicate-suppression: agents send STATE_UPDATE + TASK_COMPLETED carrying
+# the same text for one reply. Forward the first, swallow the echo.
+_forwarded: dict[tuple[str, str, str], float] = {}
+_DEDUP_WINDOW_SEC = 30.0
+
+
+def _event_type_str(event: EventPayload) -> str:
+    et = event.event_type
+    return et.value if hasattr(et, "value") else str(et)
+
 
 @contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global send_lock
     send_lock = asyncio.Lock()
     global bus_client
     bus_client = NeuralBusClient(identity="UI_Bridge")
-    
-    async def handle_agent_message(event: EventPayload):
+
+    async def handle_agent_message(event: EventPayload) -> None:
         logger.info(f"Bridge received from ZMQ: {event.payload}")
-        
+
         payload_data = event.payload
         if isinstance(payload_data, str):
             try:
                 payload_data = json.loads(payload_data)
             except Exception:
-                pass
+                logger.debug("Bridge payload is not JSON, keeping as string", exc_info=True)
 
         is_status = isinstance(payload_data, dict) and "status_action" in payload_data
-        
+
         if is_status:
             text_content = payload_data.get("status_action")
         else:
-            text_content = payload_data.get("message", str(payload_data)) if isinstance(payload_data, dict) else str(payload_data)
-            
-        msg_str = json.dumps({
-            "sender": event.source_agent_id,
-            "text": text_content,
-            "type": "status" if is_status else "chat"
-        })
-        
+            text_content = (
+                payload_data.get("message", str(payload_data))
+                if isinstance(payload_data, dict)
+                else str(payload_data)
+            )
+
+        msg_str = json.dumps(
+            {
+                "sender": event.source_agent_id,
+                "text": text_content,
+                "type": "status" if is_status else "chat",
+            }
+        )
+
+        # Swallow the TASK_COMPLETED echo of an already-forwarded reply.
+        # Also drop empty frames (Thinking ghosts / blank completions).
+        if not str(text_content).strip():
+            return
+        dedup_key = (
+            str(event.correlation_id),
+            str(event.source_agent_id),
+            str(text_content),
+        )
+        now = time.time()
+        for key in [k for k, ts in _forwarded.items() if now - ts > _DEDUP_WINDOW_SEC]:
+            del _forwarded[key]
+        if _event_type_str(event) == "task_completed" and dedup_key in _forwarded:
+            logger.debug("Bridge swallowed duplicate TASK_COMPLETED echo for %s.", dedup_key[0])
+            return
+        _forwarded[dedup_key] = now
+
         if send_lock:
             async with send_lock:
-                for conn in list(active_connections):
+                for conn in list(active_connections):  # noqa: PERF101
                     try:
                         await conn.send_text(msg_str)
-                    except Exception as e:
-                        logger.error(f"WebSocket send failed: {e}")
-                
+                    except Exception:
+                        logger.exception("WebSocket send failed")
+
     bus_client.register_handler(EventType.STATE_UPDATE.value, handle_agent_message)
     bus_client.register_handler(EventType.TASK_COMPLETED.value, handle_agent_message)
     bus_client.register_handler(EventType.SOVEREIGN_OVERRIDE.value, handle_agent_message)
     bus_client.register_handler(EventType.AGENT_ALIVE.value, handle_agent_message)
-    
+
     asyncio.create_task(bus_client.start())
-    yield
+    try:
+        yield
+    finally:
+        if bus_client is not None:
+            await bus_client.stop()
+
 
 app = FastAPI(title="Sovereign UI Bridge", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(
+        ","
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+@app.get("/api/health")
+async def health_check() -> dict[str, Any]:
+    return {
+        "status": "online",
+        "bus_connected": bus_client is not None,
+        "zmq_router": os.getenv("ZMQ_ROUTER_URL", "tcp://127.0.0.1:5555"),
+        "timestamp": time.time(),
+    }
+
+
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     active_connections.append(websocket)
     logger.info("New UI WebSocket Connection Established.")
-    
+
     authenticated = False
-    
+
     try:
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
-            
+
             if not authenticated:
                 token = payload.get("clerk_token")
                 if verify_clerk_token(token):
@@ -145,33 +214,48 @@ async def websocket_endpoint(websocket: WebSocket):
 
             target_agent = payload.get("agent", "neo")
             user_text = payload.get("text", "")
-            
+
             logger.info(f"UI sent to {target_agent}: {user_text}")
-            
+
             event = EventPayload(
                 event_type=EventType.USER_COMMAND,
                 source_agent_id="Commander_UI",
                 correlation_id=str(int(time.time())),
-                payload={"target_agent": target_agent, "message": user_text}
+                payload={
+                    "target_agent": target_agent,
+                    "message": user_text,
+                },
             )
-            await bus_client.send(event)
-            
+            if bus_client is not None:
+                await bus_client.send(event)
+            else:
+                logger.error("Cannot forward user command: bus_client is not initialized")
+
     except WebSocketDisconnect:
         logger.info("UI WebSocket Connection Closed.")
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
 
-def run_bridge():
-    if sys.platform == 'win32':
+
+def run_bridge() -> None:
+    if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    uvicorn.run("services.ui_bridge:app", host=os.getenv("UI_HOST", "0.0.0.0"), port=int(os.getenv("UI_PORT", 8000)), reload=False, loop="asyncio")
+    uvicorn.run(
+        app,
+        # Localhost default; set UI_HOST or HOST to 0.0.0.0 to opt into all interfaces.
+        host=os.getenv("UI_HOST", os.getenv("HOST", "127.0.0.1")),
+        port=int(os.getenv("UI_PORT", "8000")),
+        reload=False,
+    )
+
 
 if __name__ == "__main__":
     try:
         run_bridge()
-    except Exception as e:
+    except Exception:
         import traceback
+
         with open("crash.log", "w") as f:
             f.write(traceback.format_exc())
         raise

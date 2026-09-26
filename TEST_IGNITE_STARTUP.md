@@ -12,7 +12,7 @@ Simulating user clicking `IGNITE_MATRIX.bat` for the first time on a clean syste
 - ✓ Node.js: v26.2.0
 - ✓ npm: 11.13.0
 - ✓ Windows: Win32
-- ✓ CWD: J:\THE_MATRIX
+- ✓ CWD: <PROJECT_ROOT>
 
 ### Dependencies
 - ✓ zmq (PyZMQ)

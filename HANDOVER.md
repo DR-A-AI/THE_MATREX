@@ -11,7 +11,7 @@ The Commander's UI is successfully transmitting `USER_COMMAND` events through th
 
 ## Required Actions for the Next Agent
 
-1. **Modify `J:\THE_MATRIX\agents\base_agent.py`:**
+1. **Modify `agents/base_agent.py`:**
    - Add `self.client.register_handler(EventType.USER_COMMAND.value, self._handle_user_command)` in the `start()` method.
    - Create an async method `_handle_user_command(self, event: EventPayload)` that receives the Commander's input.
    - The method must ensure the command is routed to the specific agent (check `event.payload.get("target_agent")`).

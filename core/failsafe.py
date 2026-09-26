@@ -1,10 +1,11 @@
-import os
-import time
-import subprocess
 import logging
-from typing import Dict, Any
+import os
+import subprocess  # nosec: B404  # fixed git argv only, shell never enabled
+import time
+from typing import Any
 
 logger = logging.getLogger("Sovereign.Failsafe")
+
 
 class FailsafeMonitor:
     """
@@ -12,29 +13,31 @@ class FailsafeMonitor:
     - Evaluates stability via mathematical metrics (error counts, uptimes).
     - NEVER inspects payloads or secrets (Zero-Trust / Blind evaluation).
     """
+
     def __init__(self, matrix_root: str):
         self.matrix_root = matrix_root
         self.metrics = {
             "total_events": 0,
             "error_events": 0,
             "last_error_time": 0.0,
-            "start_time": time.time()
+            "start_time": time.time(),
         }
 
-    async def attach_to_bus(self, client):
+    async def attach_to_bus(self, client: Any) -> None:
         """Attaches the monitor to the Neural Bus to autonomously track stability."""
         from core.models import EventType
+
         client.register_handler(EventType.ERROR.value, self._handle_bus_error)
         client.register_handler(EventType.TASK_FAILED.value, self._handle_bus_error)
         logger.info("[Failsafe] Autonomous Error Monitoring Engaged on Neural Bus.")
 
-    async def _handle_bus_error(self, event):
+    async def _handle_bus_error(self, event: Any) -> None:
         """Mathematically track errors without seeing the payload details."""
         self.record_event(is_error=True)
         score = self.calculate_stability_score()
         logger.warning(f"[Failsafe] 🚨 ERROR DETECTED! Stability Score dropped to: {score:.1f}%")
 
-    def record_event(self, is_error: bool = False):
+    def record_event(self, is_error: bool = False) -> None:
         """Mathematically track events without seeing the payload"""
         self.metrics["total_events"] += 1
         if is_error:
@@ -48,16 +51,15 @@ class FailsafeMonitor:
         """
         if self.metrics["total_events"] == 0:
             return 100.0
-            
+
         error_rate = self.metrics["error_events"] / self.metrics["total_events"]
-        uptime = time.time() - self.metrics["start_time"]
-        
+
         # Penalize for recent errors
         time_since_error = time.time() - self.metrics["last_error_time"]
-        recent_penalty = 0
-        if self.metrics["last_error_time"] > 0 and time_since_error < 300: # within 5 mins
+        recent_penalty: float = 0.0
+        if self.metrics["last_error_time"] > 0 and time_since_error < 300:  # within 5 mins
             recent_penalty = 20.0
-            
+
         score = 100.0 - (error_rate * 100.0) - recent_penalty
         return max(0.0, min(100.0, score))
 
@@ -67,12 +69,9 @@ class FailsafeMonitor:
         This triggers a notification to the Commander.
         """
         score = self.calculate_stability_score()
-        uptime = time.time() - self.metrics["start_time"]
-        
-        # Require 95+ score and at least 1 hour of simulated uptime (or 50 events)
-        if score >= 95.0 and self.metrics["total_events"] > 50:
-            return True
-        return False
+
+        # Require 95+ score and at least 50 verified telemetry events
+        return score >= 95.0 and self.metrics["total_events"] > 50
 
     def create_pre_danger_restore_point(self, operation_name: str) -> str:
         """
@@ -82,17 +81,23 @@ class FailsafeMonitor:
         safe_name = operation_name.replace(" ", "_").replace("/", "_")
         timestamp = int(time.time())
         tag_name = f"PRE_DANGER_{safe_name}_{timestamp}"
-        
+
         try:
             logger.info(f"Creating Pre-Danger Restore Point: {tag_name}")
-            
+
             # 1. Stash any uncommitted tracked files
-            subprocess.run(["git", "stash"], cwd=self.matrix_root, capture_output=True, check=True)
-            
+            subprocess.run(  # nosec: B603, B607  # fixed git argv, no shell; git via PATH is intended
+                ["git", "stash"], cwd=self.matrix_root, capture_output=True, check=True
+            )
+
             # 2. Tag the current stable commit
-            subprocess.run(["git", "tag", "-a", tag_name, "-m", f"Automated Failsafe before {operation_name}"], 
-                           cwd=self.matrix_root, capture_output=True, check=True)
-            
+            subprocess.run(  # nosec: B603, B607  # fixed git-tag argv, no shell; git via PATH is intended
+                ["git", "tag", "-a", tag_name, "-m", f"Automated Failsafe before {operation_name}"],
+                cwd=self.matrix_root,
+                capture_output=True,
+                check=True,
+            )
+
             logger.info("Restore point created successfully.")
             return tag_name
         except subprocess.CalledProcessError as e:
@@ -105,13 +110,25 @@ class FailsafeMonitor:
         """
         if not approval_signature:
             raise PermissionError("Sovereign Commander Approval Required!")
-            
+
         timestamp = int(time.time())
         tag_name = f"GOLDEN_STATE_{timestamp}"
-        
-        subprocess.run(["git", "tag", "-a", tag_name, "-m", f"Approved Golden State by Commander. Sig: {approval_signature}"], 
-                       cwd=self.matrix_root, capture_output=True, check=True)
+
+        subprocess.run(  # nosec: B603, B607  # fixed git-tag argv, no shell; git via PATH is intended
+            [
+                "git",
+                "tag",
+                "-a",
+                tag_name,
+                "-m",
+                f"Approved Golden State by Commander. Sig: {approval_signature}",
+            ],
+            cwd=self.matrix_root,
+            capture_output=True,
+            check=True,
+        )
         return tag_name
+
 
 if __name__ == "__main__":
     # Test execution

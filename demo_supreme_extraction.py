@@ -1,15 +1,14 @@
 import asyncio
 import logging
-import uuid
-import sys
 import os
+import sys
 
 # Ensure the core modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from core.neural_bus import NeuralBusClient
-from core.models import EventPayload, EventType, TaskDefinition
 from agents.neo_agent import NeoAgent
+from core.models import EventPayload, EventType
+from core.neural_bus import NeuralBusClient
 from services.assistant_crawler import AssistantCrawler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -44,7 +43,7 @@ async def run_demo():
     
     await asyncio.sleep(1) # Wait for connections to stabilize
     
-    # 3. Simulate Neo performing an extraction
+    # 3. Neo executing live token extraction
     logger.info("=== COMMENCING SUPREME EXTRACTION ===")
     await neo.extract_and_surrender_token(
         target_platform="GitHub_Enterprise_API",

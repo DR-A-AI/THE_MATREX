@@ -40,6 +40,11 @@ packages = ["core", "services", "agents", "config", "skills"]
 [tool.black]
 line-length = 100
 target-version = ['py310']
+exclude = '/(\.direnv|\.eggs|\.git|\.hg|\.ipynb_checkpoints|\.mypy_cache|\.nox|\.pytest_cache|\.ruff_cache|\.tox|\.venv|_build|buck-out|build|dist|venv|vendor)/'
+force-exclude = '''pyproject\.toml'''
+
+[tool.ruff]
+exclude = ["vendor", ".venv", ".agents"]
 
 [tool.mypy]
 python_version = "3.10"

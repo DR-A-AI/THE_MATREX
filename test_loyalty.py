@@ -1,9 +1,14 @@
 import asyncio
-import uuid
-import time
 import json
-from core.neural_bus import NeuralBusClient
+import os
+import uuid
+from pathlib import Path
+
 from core.models import EventPayload, EventType
+from core.neural_bus import NeuralBusClient
+
+matrix_root = os.getenv("MATRIX_ROOT", str(Path(__file__).resolve().parent))
+
 
 async def test_agents():
     print("Initiating Loyalty and Capabilities Verification Protocol...")
@@ -59,7 +64,7 @@ async def test_agents():
         event_type=EventType.USER_COMMAND,
         source_agent_id="Commander_Tester",
         correlation_id=str(uuid.uuid4()),
-        payload={"target_agent": "morpheus", "message": "تذكر: ماذا تعرف عن مفاتيح جوجل الـ 60 ومشروع J:\\THE_MATRIX؟"}
+        payload={"target_agent": "morpheus", "message": f"تذكر: ماذا تعرف عن مفاتيح جوجل الـ 60 ومشروع {matrix_root}؟"}
     )
     await client.send(event)
     
@@ -67,10 +72,13 @@ async def test_agents():
     
     print("\nVerification Complete.")
     await client.stop()
-    
-    # Save results
-    with open("loyalty_report.json", "w", encoding="utf-8") as f:
-        json.dump(responses, f, ensure_ascii=False, indent=4)
+
+    # Save results without blocking the event loop
+    def _save_report() -> None:
+        with open("loyalty_report.json", "w", encoding="utf-8") as f:
+            json.dump(responses, f, ensure_ascii=False, indent=4)
+
+    await asyncio.to_thread(_save_report)
 
 if __name__ == "__main__":
     import sys

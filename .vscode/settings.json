@@ -1,0 +1,68 @@
+{
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}"
+  ],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.terminal.activateEnvironment": true,
+  "python.envFile": "${workspaceFolder}/.env",
+  "ruff.enable": true,
+  "ruff.organizeImports": true,
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto",
+      "directory": "${workspaceFolder}/dashboard"
+    }
+  ],
+  "terraform.languageServer": {
+    "enabled": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.coverage": true
+  },
+  "chat.mcp.serverSampling": {
+    "matrex-dev/.vscode/mcp.json: io.github.ChromeDevTools/chrome-devtools-mcp": {
+      "allowedModels": [
+        "agent-host-copilotcli:auto",
+        "copilotcli/auto",
+        "copilot/auto",
+        "agent-host-copilotcli:opencode/big-pickle",
+        "agent-host-copilotcli:opencode/ling-3.0-flash-fin-free",
+        "agent-host-copilotcli:ms365copilot/ms365-copilot-claude",
+        "ms365copilot/ms365-copilot-claude",
+        "agent-host-copilotcli:ms365copilot/ms365-copilot-gpt",
+        "ms365copilot/ms365-copilot-gpt",
+        "agent-host-copilotcli:ms365copilot/ms365-copilot-reasoning",
+        "ms365copilot/ms365-copilot-reasoning",
+        "agent-host-copilotcli:ms365copilot/ms365-copilot-auto",
+        "ms365copilot/ms365-copilot-auto",
+        "agent-host-copilotcli:opencode/mimo-v2.6-flash-free",
+        "agent-host-copilotcli:opencode/muse-spark-1.3-contributor-free",
+        "agent-host-copilotcli:opencode/nemotron-3-ultra-free",
+        "agent-host-copilotcli:opencode/nemotron-3.5-lightning-free",
+        "agent-host-copilotcli:opencode/space-bunny-free",
+        "agent-host-copilotcli:opencode/space-bunny-free-go"
+      ]
+    }
+  }
+}

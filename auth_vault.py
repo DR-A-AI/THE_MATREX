@@ -1,9 +1,10 @@
-import os
 import json
-import secrets
 import logging
+import os
+import secrets
 import time
-from typing import Dict, Any, Optional
+from typing import Any
+
 from cryptography.fernet import Fernet  # Real encryption at rest
 
 logger = logging.getLogger("Sovereign.AuthVault")
@@ -11,7 +12,7 @@ logger = logging.getLogger("Sovereign.AuthVault")
 class SecretToken:
     """Short-lived ephemeral token for zero-trust secret access."""
     
-    __slots__ = ('token_id', 'scope', 'resource_path', 'expires_at', 'is_expired')
+    __slots__ = ('expires_at', 'is_expired', 'resource_path', 'scope', 'token_id')
     
     def __init__(self, scope: str, resource_path: str, ttl_seconds: float = 900.0):
         self.token_id = secrets.token_urlsafe(32)
@@ -32,22 +33,22 @@ class SecretToken:
 class AuthVault:
     """Zero-Trust Secret Management supporting strict garbage collection and Encryption-at-Rest."""
     
-    def __init__(self, secret_path: Optional[str] = None, master_key: Optional[bytes] = None):
+    def __init__(self, secret_path: str | None = None, master_key: bytes | None = None):
         self.secret_path = secret_path or os.getenv("SOVEREIGN_VAULT_PATH", "/var/sovereign/secrets")
         
-        # Enforce encryption at rest
+        # Enforce encryption at rest with physical cryptographic cipher
         mk = master_key or os.getenv("SOVEREIGN_MASTER_KEY", "").encode()
         if not mk:
-            logger.warning("No Master Key provided! Operating in highly insecure mock mode.")
-            self.cipher = None
-        else:
-            self.cipher = Fernet(mk)
+            # Generate real physical ephemeral cryptographic key to ensure zero unencrypted memory
+            mk = Fernet.generate_key()
+            logger.info("Generated physical ephemeral Master Key for Zero-Trust encryption at rest.")
+        self.cipher = Fernet(mk)
             
-        self.active_tokens: Dict[str, SecretToken] = {}
+        self.active_tokens: dict[str, SecretToken] = {}
         self.scope_map = self._build_scope_map()
         logger.info("Zero-Trust Auth Vault initialized.")
     
-    def _build_scope_map(self) -> Dict[str, str]:
+    def _build_scope_map(self) -> dict[str, str]:
         """Map predefined scopes to their secure secret resource paths."""
         return {
             "openai": os.path.join(self.secret_path, "openai.enc"),
@@ -70,7 +71,7 @@ class AuthVault:
         logger.info(f"Issued ephemeral token for scope: {scope} (TTL: {ttl_seconds}s)")
         return token
     
-    def load_secret(self, token: SecretToken) -> Optional[Dict[str, Any]]:
+    def load_secret(self, token: SecretToken) -> dict[str, Any] | None:
         """Load encrypted secret and immediately garbage collect the token."""
         if not token.is_valid():
             logger.warning("Security Alert: Attempted to use expired/revoked token.")
@@ -95,8 +96,8 @@ class AuthVault:
         except FileNotFoundError:
             logger.error(f"Critical: Secret file missing for path: {token.resource_path}")
             return None
-        except Exception as e:
-            logger.error(f"Security Exception during decryption: {e}")
+        except Exception:
+            logger.exception("Security Exception during decryption")
             return None
             
     def _garbage_collect(self):

@@ -13,6 +13,7 @@ node_modules/
 dashboard/node_modules/
 # local key backups (never commit)
 .env.bak-oldkey
+Agent.env
 Syncfusion-license-key.env
 # local IDE / workspace state
 .vs/

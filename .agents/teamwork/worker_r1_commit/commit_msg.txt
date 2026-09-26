@@ -1,0 +1,11 @@
+chore(core): Phase 1 complete — audit remediation, portability, style compliance
+
+- Fix WebSocket broadcast race condition (list snapshot under send_lock)
+- Fix shell injection in neo_agent.py (shell=True → shlex.split)
+- Eliminate all J:\THE_MATRIX hardcoded paths across 5 modules
+- Add os import + MATRIX_ROOT/MATRIX_MEMORY_ROOT env resolution
+- Black/Ruff/Bandit: all green (0 issues, 3159 LOC)
+- Pytest: 25/25 passed
+- Add msgpack, Pillow, mss, aiofiles, google-genai to requirements.txt
+- Expand .gitignore: .vs/, .coverage, htmlcov/, *.db
+- Consolidate [tool.ruff] exclude in pyproject.toml

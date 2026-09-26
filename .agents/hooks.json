@@ -1,0 +1,17 @@
+{
+  "code-quality-gate": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": "replace_file_content|write_to_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash /mnt/e/matrex-dev/.agents/scripts/quality_gate.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

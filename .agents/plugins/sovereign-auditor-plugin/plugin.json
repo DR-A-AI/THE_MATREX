@@ -1,0 +1,5 @@
+{
+  "name": "sovereign-auditor-plugin",
+  "description": "Sovereign Security & Code Auditor subagent with companion routing skill for automated quality gates, shell=False compliance, secret leak prevention, and AST analysis.",
+  "version": "1.0.0"
+}

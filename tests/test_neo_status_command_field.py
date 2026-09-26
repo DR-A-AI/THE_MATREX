@@ -77,3 +77,48 @@ async def test_command_field_readiness_returns_arabic_telemetry(
     for banned in status_telemetry.BANNED_PHRASES:
         assert banned not in text.lower()
     assert any(e.event_type == EventType.TASK_COMPLETED for e in sent_events)
+
+
+@pytest.mark.asyncio
+async def test_substantive_audit_request_is_not_hijacked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """'Run a full system status audit...' must NOT get instant telemetry.
+
+    It must flow to normal routing/tools (grounded, never hypothetical).
+    Proof: no deterministic telemetry reply is emitted synchronously here —
+    the handler must reach the LLM/tool path instead. We assert the
+    readiness gate itself rejects it, and that the deterministic reply
+    builder is never invoked for it.
+    """
+    assert status_telemetry.is_readiness_ping("جاهز؟") is True
+    assert status_telemetry.is_readiness_ping("انت جاهز") is True
+    assert status_telemetry.is_readiness_ping("ready?") is True
+    assert (
+        status_telemetry.is_readiness_ping(
+            "Run a full system status audit on all agents and the neural bus."
+        )
+        is False
+    )
+    assert status_telemetry.is_readiness_ping("Check local Ollama tensor health and latency.") is False
+    assert (
+        status_telemetry.is_readiness_ping("Verify active cloud accounts and Flex Processing state.")
+        is False
+    )
+    # Broad grounding detector still sees status content (for grounded answers).
+    assert status_telemetry.is_status_query("Run a full system status audit.") is True
+
+
+def test_collect_full_status_probes_live_and_masks_keys() -> None:
+    """Full snapshot has real probed data and ZERO raw secrets."""
+    import json as _json
+
+    data = status_telemetry.collect_full_status(timeout=2.0)
+    assert set(data) == {"telemetry", "groq_pool", "ollama_models"}
+    assert data["telemetry"]["bus"]["online"] in (True, False)
+    assert isinstance(data["groq_pool"]["accounts"], list)
+    blob = _json.dumps(data)
+    assert "api_key" not in blob  # raw secret field must never appear
+    for acc in data["groq_pool"]["accounts"]:
+        assert set(acc) == {"id", "email", "key", "active", "flex"}
+        assert acc["key"].startswith("gsk_***") or acc["key"] in ("***", "NONE")

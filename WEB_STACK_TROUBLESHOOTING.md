@@ -47,7 +47,7 @@ Windows may block ports 5173 and 8000:
 
 **Terminal 1** - Dashboard:
 ```bash
-cd J:\THE_MATRIX\dashboard
+cd dashboard
 npm run dev
 # Should output: 
 # VITE v8.0.12  ready in 234 ms
@@ -56,7 +56,6 @@ npm run dev
 
 **Terminal 2** - UI Bridge:
 ```bash
-cd J:\THE_MATRIX
 python services/ui_bridge.py
 # Should output:
 # INFO:     Uvicorn running on http://127.0.0.1:8000
@@ -64,7 +63,6 @@ python services/ui_bridge.py
 
 **Terminal 3** - Core Engine:
 ```bash
-cd J:\THE_MATRIX
 python matrix_main.py
 # Should output:
 # ✓ All core systems online

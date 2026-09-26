@@ -1,7 +1,4 @@
 import asyncio
-import sys
-
-sys.path.append(r"J:\THE_MATRIX")
 
 import pytest
 import zmq
@@ -14,12 +11,13 @@ from services.librarian import SecureLibrarian
 
 @pytest.mark.asyncio
 async def test_librarian_jit_provisioning():
-    # 1. Setup mock vault and ZMQ client
+    # 1. Setup real vault and ZMQ client
     vault = AuthVault()
     bus_client = NeuralBusClient(identity="Test_Librarian_Client", endpoint="tcp://127.0.0.1:5555")
 
     # 2. Instantiate Librarian on a separate test port (e.g. 5559) to prevent conflicts
     librarian = SecureLibrarian(bus=bus_client, vault=vault, port=5559)
+    librarian._secret_store["gemini"] = "sec_gemini_real_token_12345"
 
     # Start Librarian task
     librarian_task = asyncio.create_task(librarian.run())
@@ -47,7 +45,7 @@ async def test_librarian_jit_provisioning():
 
     # 6. Verify token in Vault
     secret = vault.consume_token(token_id)
-    assert secret == "EXTRACTED_SECRET_MOCK"
+    assert secret == "sec_gemini_real_token_12345"
 
     # Clean up
     client_socket.close()

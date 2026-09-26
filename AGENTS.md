@@ -33,3 +33,9 @@
 ## Frontend / deploy
 - Dashboard (`dashboard/`, React 19 + Vite 8 + Tailwind 4): `cd dashboard && npm install && npm run dev` / `npm run build` / `npm run lint`. `vite.config.js` `base: '/THE_MATREX/'` (GitHub Pages path) — don't change without updating `deploy-pages.yml`. Vercel build: `cd dashboard && npm install && npm run build`, output `dashboard/dist` (`vercel.json`).
 - `terraform/` applies on push to `main` via OIDC (`azure_terraform.yml`); safe to read, do not hand-edit without a plan.
+
+## Handover Protocol (Mandatory for all Agents)
+- **Official Handover Directory:** `E:\matrex-dev\Handover` (WSL: `/mnt/e/matrex-dev/Handover`).
+- Any agent or model working on this project that is asked to produce a handover file, delivery summary, or system status report MUST create and persist it directly in `Handover/`.
+- The master handover and educational architecture guide is maintained at `Handover/MASTER_HANDOVER_REPORT.md`.
+

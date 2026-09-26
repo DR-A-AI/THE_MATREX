@@ -167,13 +167,16 @@ class NeoAgent(MatrixAgent):
         logger.info(f"[{self.name}] Neo (Antigravity) received directive: {message}")
 
         # --- DETERMINISTIC STATUS / CORRECTION PATH (anti-hallucination) ---
-        # MUST run BEFORE any semantic routing: status & readiness questions are
+        # MUST run BEFORE any semantic routing: BARE readiness pings are
         # answered from live telemetry, never from free LLM generation (which
         # emitted canned "hypothetical" disclaimers). Corrections prune the bad
         # turn so it is never defended. Checking the raw text first guarantees
         # the 'جاهز؟'-style readiness probe never falls through to general_chat
         # on an empty-string (score=0.00) tie when the payload used 'command'.
-        from core.status_telemetry import is_correction, is_status_query
+        # NOTE: only full-message pings intercept here — substantive requests
+        # ("run a full audit...", "check tensor health...") MUST flow to normal
+        # routing/tools, grounded by GROUNDING_SUFFIX (telemetry, never hypothetical).
+        from core.status_telemetry import is_correction, is_readiness_ping
 
         intent = None  # set by correction-remainder path; else parsed after intercept
         if is_correction(message):
@@ -189,7 +192,7 @@ class NeoAgent(MatrixAgent):
                 f"dropped {dropped} stale assistant turn(s)."
             )
             remainder = strip_correction_prefix(message)
-            if remainder and is_status_query(remainder):
+            if remainder and is_readiness_ping(remainder):
                 await self._reply_live_status(event, remainder)
                 return
             if remainder:
@@ -215,9 +218,27 @@ class NeoAgent(MatrixAgent):
                 )
                 await self._send_final_reply(event, clarification)
                 return
-        elif is_status_query(message):
+        elif is_readiness_ping(message):
             await self._reply_live_status(event, message)
             return
+
+        # Grounding injection: status-flavored substantive requests carry the
+        # live telemetry snapshot INTO the LLM prompt, so answers are built
+        # from probed data instead of generic boilerplate. Real data, no mock.
+        from core.status_telemetry import is_status_query as _is_status_q
+
+        if _is_status_q(message):
+            try:
+                from core.status_telemetry import collect_full_status as _collect
+
+                _snap = _collect()
+                message = (
+                    f"{message}\n\n[Live system snapshot — call get_system_status "
+                    f"for the authoritative snapshot, then answer ONLY from live "
+                    f"probed facts, never hypothetical or generic: {_snap}]"
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"[{self.name}] Telemetry snapshot unavailable: {e}")
 
         # Semantic Router & Dynamic Tool Pruning (runs ONLY after deterministic intercept)
         if intent is None:
@@ -282,6 +303,17 @@ class NeoAgent(MatrixAgent):
             except Exception as e:
                 logger.exception("Local command execution failed")
                 return f"ERROR executing command: {e!s}"
+
+        def get_system_status(**_ignored: Any) -> str:
+            """Returns authoritative LIVE system snapshot (telemetry + Groq
+            pool + Ollama models). All fields probed at call time; keys masked.
+            Call this FIRST for any status/audit/health/verification question
+            and answer ONLY from its output."""
+            import json as _json
+
+            from core.status_telemetry import collect_full_status
+
+            return _json.dumps(collect_full_status(), ensure_ascii=False)
 
         def _resolve_safe_path(path_str: str) -> Path:
             """Resolves path and enforces that it remains strictly inside workspace_root."""
@@ -439,6 +471,7 @@ class NeoAgent(MatrixAgent):
 
         tool_map: dict[str, Any] = {
             "run_local_command": run_local_command,
+            "get_system_status": get_system_status,
             "read_local_file": read_local_file,
             "write_local_file": write_local_file,
             "edit_local_file": edit_local_file,
@@ -464,6 +497,14 @@ class NeoAgent(MatrixAgent):
                         },
                         "required": ["command"],
                     },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_system_status",
+                    "description": "Returns authoritative LIVE system snapshot: probed bus/Ollama/bridge/dashboard telemetry plus Groq pool accounts (masked keys) and Ollama models. MUST be called first for any status, audit, health, or verification question; answer ONLY from its output.",
+                    "parameters": {"type": "object", "properties": {}},
                 },
             },
             {
@@ -637,6 +678,8 @@ class NeoAgent(MatrixAgent):
             "Explain your intent clearly in the same response as the function call (e.g., 'I will now open the file to inspect the configuration...'). "
             "This text will be broadcasted live to the Commander's status panel on the left sidebar. "
             "Speak Arabic naturally if the Commander speaks Arabic. Keep your answers concise, direct, and professional."
+            " LANGUAGE RULE: reply strictly in the Commander's language — Arabic input gets an Arabic-only reply, "
+            "English input gets an English-only reply. Never mix languages or scripts inside one reply."
             f"{GROUNDING_SUFFIX}"
         )
 
@@ -660,11 +703,18 @@ class NeoAgent(MatrixAgent):
         if getattr(self, "mcp_tools", None):
             tool_schemas.extend(self.mcp_tools)
 
-        # Dynamic Semantic Tool Pruning based on intent route
-        if intent.route == "general_chat" or not intent.selected_tools:
+        # Dynamic Semantic Tool Pruning based on intent route.
+        # Status-flavored questions ALWAYS keep get_system_status available
+        # (even under general_chat pruning) so answers come from live data.
+        from core.status_telemetry import is_status_query as _is_status_q2
+
+        _needs_live_status = _is_status_q2(message)
+        if (intent.route == "general_chat" or not intent.selected_tools) and not _needs_live_status:
             active_tool_schemas = None
         else:
-            allowed_names = set(intent.selected_tools)
+            allowed_names = set(intent.selected_tools or [])
+            if _needs_live_status:
+                allowed_names.add("get_system_status")
             if intent.route == "dev_mcp_ops" and getattr(self, "mcp_tools", None):
                 for mcp_tool in self.mcp_tools:
                     tool_fn = mcp_tool.get("function", {})

@@ -1,7 +1,4 @@
 import json
-import sys
-
-sys.path.append(r"J:\THE_MATRIX")
 from datetime import datetime, timezone
 
 from core.models import EventPayload, EventType

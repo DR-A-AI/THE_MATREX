@@ -4,8 +4,10 @@ Secure key creation script — writes directly to .env, never prints keys.
 
 import json
 import logging
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +72,8 @@ TRINITY_API_KEY={tri_key}
 MORPHEUS_API_KEY={tri_key}
 """
 
-with open(r"J:\THE_MATRIX\.env", "w", encoding="utf-8") as f:
+env_path = Path(os.getenv("MATRIX_ROOT", Path(__file__).resolve().parent)) / ".env"
+with open(env_path, "w", encoding="utf-8") as f:
     f.write(env_content)
 
 print("[OK] Keys created and written to .env — values NOT displayed.")

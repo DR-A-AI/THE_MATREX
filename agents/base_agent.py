@@ -1,5 +1,4 @@
 import asyncio
-import hmac
 import json
 import logging
 import os
@@ -162,12 +161,9 @@ class MatrixAgent:
     async def _validate_commander(self, event: EventPayload) -> bool:
         """Validates that command comes from authorized Commander.
 
-        Two tiers (defense in depth):
-        1. When COMMANDER_AUTH_TOKEN is configured, the payload MUST carry
-           a matching ``commander_token`` (constant-time compare). A wrong
-           token rejects even whitelisted source names.
-        2. When no token is configured (tests/dev), fall back to the
-           whitelisted source-name list.
+        Passwordless local command (per operator order): authority derives
+        from the whitelisted source identity on the HMAC-signed localhost
+        bus. No shared token is required or compared.
         Rejections are rate-limited per source (60s) to avoid log spam;
         the rejection itself always applies.
         """
@@ -177,37 +173,26 @@ class MatrixAgent:
         _ALERT_WINDOW = 60.0
 
         source = event.source_agent_id
-        payload = event.payload if isinstance(event.payload, dict) else {}
-        presented = payload.get("commander_token", "")
-        expected = os.getenv("COMMANDER_AUTH_TOKEN", "")
+        if source in AUTHORIZED_COMMANDERS:
+            return True
 
-        authorized = False
-        if expected:
-            if isinstance(presented, str) and presented:
-                authorized = hmac.compare_digest(presented, expected)
-        else:
-            authorized = source in AUTHORIZED_COMMANDERS
+        now = time.time()
+        if not hasattr(self, "_unauth_alert_at"):
+            self._unauth_alert_at: dict[str, float] = {}
+        last = self._unauth_alert_at.get(source, 0.0)
+        if now - last >= _ALERT_WINDOW:
+            self._unauth_alert_at[source] = now
+            logger.critical(f"[{self.name}] UNAUTHORIZED COMMAND from {source}. REJECTED.")
 
-        if not authorized:
-            now = time.time()
-            last = self._unauth_alert_at.get(source, 0.0) if hasattr(self, "_unauth_alert_at") else 0.0
-            if not hasattr(self, "_unauth_alert_at"):
-                self._unauth_alert_at: dict[str, float] = {}
-            if now - last >= _ALERT_WINDOW:
-                self._unauth_alert_at[source] = now
-                logger.critical(f"[{self.name}] UNAUTHORIZED COMMAND from {source}. REJECTED.")
-
-            # Send alert
-            alert = EventPayload(
-                event_type=EventType.STATE_UPDATE,
-                source_agent_id=self.name,
-                correlation_id=event.correlation_id,
-                payload={"message": f"🚨 SECURITY ALERT: Unauthorized command from {source}"},
-            )
-            await self.client.send(alert)
-            return False
-
-        return True
+        # Send alert
+        alert = EventPayload(
+            event_type=EventType.STATE_UPDATE,
+            source_agent_id=self.name,
+            correlation_id=event.correlation_id,
+            payload={"message": f"🚨 SECURITY ALERT: Unauthorized command from {source}"},
+        )
+        await self.client.send(alert)
+        return False
 
     async def _send_final_reply(self, event: EventPayload, text: str) -> None:
         """Send a terminal text answer as STATE_UPDATE + TASK_COMPLETED."""
@@ -278,14 +263,17 @@ class MatrixAgent:
         logger.info(f"[{self.name}] Received directive from Commander: {message}")
 
         # --- DETERMINISTIC STATUS / CORRECTION PATH (anti-hallucination) ---
-        # MUST run BEFORE any semantic routing: status & readiness questions are
+        # MUST run BEFORE any semantic routing: BARE readiness pings are
         # answered from live telemetry on the raw text (command or message),
         # never from free LLM generation. Checking first guarantees the
         # 'جاهز؟'-style probe never falls through to general_chat on an
         # empty-string (score=0.00) tie when the payload used 'command'.
+        # NOTE: only full-message pings intercept — substantive requests
+        # ("run a full audit...", "check tensor health...") MUST flow to normal
+        # routing/tools, grounded by GROUNDING_SUFFIX (telemetry, never hypothetical).
         from core.status_telemetry import (
             is_correction,
-            is_status_query,
+            is_readiness_ping,
             prune_last_assistant_turn,
             strip_correction_prefix,
         )
@@ -298,7 +286,7 @@ class MatrixAgent:
                 f"dropped {dropped} stale assistant turn(s)."
             )
             remainder = strip_correction_prefix(message)
-            if remainder and is_status_query(remainder):
+            if remainder and is_readiness_ping(remainder):
                 await self._reply_live_status(event, remainder)
                 return
             if remainder:
@@ -322,9 +310,26 @@ class MatrixAgent:
                 )
                 await self._send_final_reply(event, clarification)
                 return
-        elif is_status_query(message):
+        elif is_readiness_ping(message):
             await self._reply_live_status(event, message)
             return
+
+        # Grounding injection (same contract as Neo): status-flavored
+        # substantive requests carry the live telemetry snapshot into the
+        # downstream prompt — probed facts only, never hypothetical.
+        from core.status_telemetry import is_status_query as _is_status_q
+
+        if _is_status_q(message):
+            try:
+                from core.status_telemetry import collect_full_status as _collect
+
+                _snap = _collect()
+                message = (
+                    f"{message}\n\n[Live system snapshot — answer ONLY from these "
+                    f"probed facts, never hypothetical or generic: {_snap}]"
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"[{self.name}] Telemetry snapshot unavailable: {e}")
 
         # --- COGNITIVE GATE (R6) ---
         # Semantic routing runs ONLY after the deterministic intercept above,

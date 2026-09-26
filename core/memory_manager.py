@@ -13,7 +13,7 @@ class AgentMemoryDB:
 
     def __init__(self, agent_name: str, memory_root: str | None = None):
         self.agent_name = agent_name.lower().strip()
-        _root = memory_root or os.getenv("MATRIX_MEMORY_ROOT", str(Path.cwd() / "memory"))
+        _root: str = memory_root or os.getenv("MATRIX_MEMORY_ROOT") or str(Path.cwd() / "memory")
         self.memory_root = Path(_root).resolve()
 
         # Ensure memory root directory exists

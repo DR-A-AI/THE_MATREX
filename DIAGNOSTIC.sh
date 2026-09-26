@@ -25,15 +25,20 @@ fi
 echo ""
 
 # Check 3: Python UI Bridge
-echo "[3/5] Checking Python environment..."
-python -c "import uvicorn, fastapi" 2>/dev/null && echo "  ✅ FastAPI/Uvicorn installed" || echo "  ❌ Missing: pip install fastapi uvicorn"
+PYTHON_BIN="python"
+if [ -f ".venv/bin/python" ]; then
+    PYTHON_BIN=".venv/bin/python"
+fi
+
+echo "[3/5] Checking Python environment ($PYTHON_BIN)..."
+$PYTHON_BIN -c "import uvicorn, fastapi" 2>/dev/null && echo "  ✅ FastAPI/Uvicorn installed" || echo "  ❌ Missing: pip install fastapi uvicorn"
 echo ""
 
 # Check 4: Test services individually
 echo "[4/5] Testing individual services..."
 echo ""
 echo "  Testing UI Bridge (FastAPI on 8000)..."
-timeout 3 python services/ui_bridge.py 2>&1 | head -5 && echo "    ✅ Starts successfully" || echo "    ⚠️ Check error above"
+SOVEREIGN_BUS_SECRET=sovereign_terminal_key_2026_matrix_secure timeout 3 $PYTHON_BIN services/ui_bridge.py 2>&1 | head -5 && echo "    ✅ Starts successfully" || echo "    ⚠️ Check error above"
 echo ""
 
 # Check 5: Firewall

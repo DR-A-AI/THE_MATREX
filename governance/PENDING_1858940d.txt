@@ -1,0 +1,3 @@
+AGENT: neo
+TOOL: get_system_status
+ARGS: {}

@@ -1,3 +1,8 @@
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
 import asyncio
 import logging
 import sys
@@ -21,11 +26,10 @@ logging.basicConfig(
 logger = logging.getLogger("Matrix.Boot")
 
 
-async def boot_matrix():
+async def boot_matrix() -> None:
     logger.info("=======================================")
     logger.info("BOOTING THE SOVEREIGN MATRIX ENGINE")
     logger.info("=======================================")
-    import os
 
     os.environ.pop("GOOGLE_API_KEY", None)
     os.environ.pop("GEMINI_API_KEY", None)
@@ -37,7 +41,9 @@ async def boot_matrix():
     # 2. Start the Failsafe Monitor
     failsafe_client = NeuralBusClient(identity="Failsafe_Client")
     await failsafe_client.start()
-    failsafe = FailsafeMonitor(matrix_root=r"J:\THE_MATRIX")
+    failsafe = FailsafeMonitor(
+        matrix_root=os.getenv("MATRIX_ROOT", "/mnt/e/matrex-dev")
+    )
     await failsafe.attach_to_bus(failsafe_client)
 
     # 3. Start the Librarian (Secure)
@@ -58,6 +64,28 @@ async def boot_matrix():
 
     # 4c. Start the Librarian Crawler (Skills)
     skills_crawler_task = asyncio.create_task(run_crawler_periodically())
+
+    # M2: Pre-warm Ollama model to eliminate cold start (~30s) delay
+    # Sends a 1-token prompt before any agent is ready so the model is loaded
+    try:
+        from services.ollama_client import OllamaClient
+        _ollama = OllamaClient()
+
+        async def _prewarm() -> None:
+            try:
+                logger.info("🔥 [PreWarm] Sending Ollama pre-warm pulse...")
+                await asyncio.to_thread(
+                    _ollama.chat,
+                    "llama3.2",
+                    [{"role": "user", "content": "hi"}],
+                )
+                logger.info("✅ [PreWarm] Ollama model warm — first inference will be fast.")
+            except Exception as _e:  # noqa: BLE001
+                logger.warning(f"[PreWarm] Ollama pre-warm failed (non-fatal): {_e}")
+
+        asyncio.create_task(_prewarm())
+    except Exception as _prewarm_err:  # noqa: BLE001
+        logger.warning(f"[PreWarm] Could not start pre-warm task: {_prewarm_err}")
 
     # 5. Start the Agents
     from agents.base_agent import MatrixAgent

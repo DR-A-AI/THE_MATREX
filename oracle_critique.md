@@ -2,7 +2,7 @@
 
 **To:** The Commander & The Dictatorial Critic
 **From:** The ORACLE (Matrix Aegis QA)
-**Subject:** Uncompromising Architectural Critique of `J:\THE_MATRIX`
+**Subject:** Uncompromising Architectural Critique of `THE_MATRIX`
 
 I have gazed into the core of the Sovereign Architecture (`core/engine.py`, `core/neural_bus.py`, `core/models.py`, `services/librarian.py`, and `agents/base_agent.py`). What I see is a system projecting an illusion of impenetrable defense, while harboring catastrophic structural fractures. 
 

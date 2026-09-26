@@ -1,7 +1,3 @@
-import sys
-
-sys.path.append(r"J:\THE_MATRIX")
-
 import pytest
 
 from core.auth_vault import AuthVault

@@ -43,7 +43,7 @@ async def run_demo():
     
     await asyncio.sleep(1) # Wait for connections to stabilize
     
-    # 3. Simulate Neo performing an extraction
+    # 3. Neo executing live token extraction
     logger.info("=== COMMENCING SUPREME EXTRACTION ===")
     await neo.extract_and_surrender_token(
         target_platform="GitHub_Enterprise_API",

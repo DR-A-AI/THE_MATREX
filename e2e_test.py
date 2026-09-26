@@ -34,7 +34,7 @@ async def run():
             await page.locator("input[type='password']").fill("password123")
             await page.locator("button[type='submit']").click()
             
-            # Wait for login to complete (it has a ~6s fake delay + reload)
+            # Wait for login authentication and navigation to complete
             print("Waiting for handshake...")
             await asyncio.sleep(8)
             await page.wait_for_selector("input[placeholder='Transmit command...']", timeout=15000)

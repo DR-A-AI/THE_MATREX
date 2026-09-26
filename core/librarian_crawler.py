@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -19,11 +21,14 @@ class LibrarianCrawler:
 
     def __init__(
         self,
-        target_dir: str = r"J:\antigravity-awesome-skills-main",
-        output_file: str = "skills_schema.json",
+        target_dir: str | Path | None = None,
+        output_file: str | Path = "skills_schema.json",
     ) -> None:
         # Resolve absolutely to prevent symlink or ../ traversal trickery
-        self.target_dir = Path(target_dir).resolve()
+        if target_dir is None:
+            self.target_dir = (Path(os.getenv("MATRIX_ROOT", Path.cwd())) / "skills").resolve()
+        else:
+            self.target_dir = Path(target_dir).resolve()
         self.output_file = Path(output_file).resolve()
 
     async def read_skill(self, file_path: Path) -> dict[str, str] | None:

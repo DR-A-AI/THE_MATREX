@@ -1,6 +1,7 @@
 #!/bin/bash
 # Sovereign Matrix — WSL stack launcher (no secrets stored; loaded at runtime only).
-# Usage: ./start_stack_wsl.sh  (from repo root)
+# Usage: ./start_stack_wsl.sh  (from repo root, in a REAL terminal — NOT from an
+# agent/tool shell, which may kill backgrounded children on timeout).
 # Starts: matrix_main (:5555) -> ui_bridge (:8000) -> vite (:5173), each backgrounded.
 set -u
 ROOT="$(cd "$(dirname "$0")" && pwd)"

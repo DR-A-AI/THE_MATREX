@@ -33,6 +33,10 @@ class EventType(str, Enum):
     MEMORY_RECALL_REQUEST = "memory_recall_request"
     MEMORY_INJECT = "memory_inject"
     MEMORY_STORED = "memory_stored"
+    SKILL_PROMOTED = "skill_promoted"
+    SKILL_REVIEW_APPROVED = "skill_review_approved"
+    DECISION_LOGGED = "decision_logged"
+    INTENT_PARSED = "intent_parsed"
 
 
 class AgentState(str, Enum):

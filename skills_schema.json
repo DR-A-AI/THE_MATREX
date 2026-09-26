@@ -5,7 +5,7 @@
         {
             "name": "Matrix Vision",
             "description": "Allows an agent to parse green falling code visually.",
-            "path": "J:\\THE_MATRIX\\skills\\test_skill.md"
+            "path": "/mnt/e/matrex-dev/skills/test_skill.md"
         }
     ]
 }

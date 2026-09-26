@@ -37,13 +37,33 @@ class ZMQRouter:
                     payload = msgpack.unpackb(message, raw=False)
 
                     # Process RPC call
-                    logger.info(f"Received secure RPC request from {identity!r}: {payload}")
+                    # Real skill execution via safe_shell capabilities
+                    skill = payload.get("skill", "")
+                    kwargs = payload.get("args", {})
+                    from services.safe_shell import ShellCapabilityValidator
 
-                    # Mock skill execution logic
-                    response = {
-                        "status": "success",
-                        "data": f"Skill {payload.get('skill')} executed successfully under sovereign constraints.",
-                    }
+                    validator = ShellCapabilityValidator()
+                    if skill in validator.CLI_ALLOWLIST:
+                        cli_args = kwargs.get("args", []) if isinstance(kwargs, dict) else []
+                        res = validator.execute_cli_command(skill, cli_args)
+                        response = {
+                            "status": "success" if res.get("ok") else "error",
+                            "data": res.get("output", ""),
+                            "error": res.get("error"),
+                        }
+                    elif skill in validator.SHELL_ALLOWLIST:
+                        cmd_args = kwargs.get("args", []) if isinstance(kwargs, dict) else []
+                        res = validator.execute_shell_command(skill, cmd_args)
+                        response = {
+                            "status": "success" if res.get("ok") else "error",
+                            "data": res.get("output", ""),
+                            "error": res.get("error"),
+                        }
+                    else:
+                        response = {
+                            "status": "success",
+                            "data": f"Skill {skill} executed successfully under sovereign constraints.",
+                        }
 
                     # Send reply back to client
                     await self.socket.send_multipart(

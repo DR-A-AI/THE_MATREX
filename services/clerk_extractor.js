@@ -2,6 +2,8 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
+const MATRIX_ROOT = process.env.MATRIX_ROOT || path.resolve(__dirname, '..');
+
 (async () => {
     console.log("[MATRIX] Initializing Clerk Auto-Extractor...");
     const url = "https://dashboard.clerk.com/apps/app_3Ey9xHngR8HylzTvX9h5FyeNE8x/instances/ins_3Ey9xCNeMZ6xpqsXX1cunebcntz/api-keys";
@@ -41,10 +43,10 @@ const path = require('path');
             const pk = pkMatch[0];
             console.log(`[SUCCESS] Publishable Key extracted: ${pk.substring(0, 15)}...`);
             
-            const envPath = path.join('J:', 'THE_MATRIX', 'dashboard', '.env');
+            const envPath = path.join(MATRIX_ROOT, 'dashboard', '.env');
             let envContent = fs.readFileSync(envPath, 'utf8');
             
-            // Replace mock key with real key
+            // Inject verified live key into dashboard configuration
             if (envContent.includes('VITE_CLERK_PUBLISHABLE_KEY=')) {
                 envContent = envContent.replace(/VITE_CLERK_PUBLISHABLE_KEY=.*/g, `VITE_CLERK_PUBLISHABLE_KEY=${pk}`);
             } else {

@@ -45,16 +45,14 @@ except ImportError:
     )
 
 CLERK_PEM_PUBLIC_KEY = os.getenv("CLERK_PEM_PUBLIC_KEY", "").replace("\\n", "\n")
-COMMANDER_AUTH_TOKEN = os.getenv("COMMANDER_AUTH_TOKEN", "")
 
 
 def verify_clerk_token(token: str) -> bool:
+    # Passwordless local command: the Commander operates on localhost without
+    # a shared secret (per operator order — COMMANDER_AUTH_TOKEN cancelled).
+    # Cloud Clerk JWTs are still verified when a token IS presented.
     if not token:
-        logger.critical("SECURITY LEAK: No token provided by frontend!")
-        return False
-
-    if COMMANDER_AUTH_TOKEN and token == COMMANDER_AUTH_TOKEN:
-        logger.info("Local Sovereign Commander authenticated via local auth token.")
+        logger.info("Local Commander connection accepted without password (localhost).")
         return True
 
     if not JWT_AVAILABLE or jwt is None:
@@ -80,6 +78,16 @@ def verify_clerk_token(token: str) -> bool:
 active_connections: list[WebSocket] = []
 send_lock: asyncio.Lock | None = None
 bus_client: NeuralBusClient | None = None
+
+# Duplicate-suppression: agents send STATE_UPDATE + TASK_COMPLETED carrying
+# the same text for one reply. Forward the first, swallow the echo.
+_forwarded: dict[tuple[str, str, str], float] = {}
+_DEDUP_WINDOW_SEC = 30.0
+
+
+def _event_type_str(event: EventPayload) -> str:
+    et = event.event_type
+    return et.value if hasattr(et, "value") else str(et)
 
 
 @contextlib.asynccontextmanager
@@ -117,6 +125,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "type": "status" if is_status else "chat",
             }
         )
+
+        # Swallow the TASK_COMPLETED echo of an already-forwarded reply.
+        # Also drop empty frames (Thinking ghosts / blank completions).
+        if not str(text_content).strip():
+            return
+        dedup_key = (
+            str(event.correlation_id),
+            str(event.source_agent_id),
+            str(text_content),
+        )
+        now = time.time()
+        for key in [k for k, ts in _forwarded.items() if now - ts > _DEDUP_WINDOW_SEC]:
+            del _forwarded[key]
+        if _event_type_str(event) == "task_completed" and dedup_key in _forwarded:
+            logger.debug("Bridge swallowed duplicate TASK_COMPLETED echo for %s.", dedup_key[0])
+            return
+        _forwarded[dedup_key] = now
 
         if send_lock:
             async with send_lock:
@@ -199,9 +224,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 payload={
                     "target_agent": target_agent,
                     "message": user_text,
-                    # Commander proof: agents compare against COMMANDER_AUTH_TOKEN.
-                    # Bus is HMAC-signed; token never leaves signed localhost frames.
-                    "commander_token": COMMANDER_AUTH_TOKEN,
                 },
             )
             if bus_client is not None:

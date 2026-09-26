@@ -7,7 +7,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Add project root to path (portable: repo root, not Windows-only J:\ path)
+# Add project root to path (portable repo root)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
@@ -48,7 +48,7 @@ async def _stop_test_router(router, task):
 
 @pytest.mark.asyncio
 async def test_real_world_librarian_crawler():
-    """Tests the LibrarianCrawler scanning skills (portable: temp dir, not J:\\ path)"""
+    """Tests the LibrarianCrawler scanning skills in an isolated temp dir"""
     with tempfile.TemporaryDirectory() as tmpdir:
         schema_file = Path(tmpdir) / "skills_schema.json"
         skills_dir = Path(tmpdir) / "skills"
@@ -58,7 +58,7 @@ async def test_real_world_librarian_crawler():
             "# Test Skill\nThis is a portable test skill for agents.", encoding="utf-8"
         )
 
-        # Portable target: temp skills dir (same code path as Windows J:\ folder)
+        # Portable target: temp skills dir
         crawler = LibrarianCrawler(target_dir=str(skills_dir), output_file=str(schema_file))
 
         # Run crawl
@@ -76,7 +76,7 @@ async def test_real_world_memory_crawler():
     """Tests storing and recalling memory via isolated router + MemoryCrawler"""
     bus = "tcp://127.0.0.1:5571"
     router, router_task = await _start_test_router(bus)
-    # Isolate SQLite DBs in a temp dir to avoid J:\\THE_MATRIX\\memory junk + cross-run pollution
+    # Isolate SQLite DBs in a temp dir to avoid memory junk + cross-run pollution
     tmp_mem = tempfile.TemporaryDirectory()
     crawler = MemoryCrawler(bus_url=bus)
     # Pre-populate the "neo" DB (source "neo-tester" -> base "neo") with isolated root

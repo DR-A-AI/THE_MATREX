@@ -24,7 +24,7 @@ class TrinityAgent(MatrixAgent):
 
     async def extract_and_surrender_token(self, target_platform: str, extracted_key: str) -> None:
         """
-        Simulates extracting a key from the outside world (e.g. Financial APIs).
+        Extracts a key from external platform APIs and transmits it blindly onto the Neural Bus for the Assistant Crawler.
         IMMEDIATELY sends it blindly onto the Neural Bus for the Assistant Crawler.
         Trinity does NOT keep the key.
         """

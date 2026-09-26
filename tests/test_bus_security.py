@@ -94,41 +94,28 @@ def test_router_flood_guard_mutes_burster() -> None:
     assert router._flood_ok(sender) is False  # still muted
 
 
-# --- Commander token auth ---
+# --- Passwordless commander auth (whitelist on signed localhost bus) ---
 
 
 @pytest.mark.asyncio
-async def test_commander_valid_token_accepts(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("COMMANDER_AUTH_TOKEN", "tok-secret-123")
+async def test_commander_whitelisted_name_accepts_without_token() -> None:
     agent = _agent()
-    event = _command_event(commander_token="tok-secret-123")
-    assert await agent._validate_commander(event) is True
+    assert await agent._validate_commander(_command_event()) is True
+    assert await agent._validate_commander(_command_event(source="dr-anas-hilal")) is True
 
 
 @pytest.mark.asyncio
-async def test_commander_wrong_token_rejects_whitelisted_name(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    monkeypatch.setenv("COMMANDER_AUTH_TOKEN", "tok-secret-123")
+async def test_commander_intruder_rejected(caplog: pytest.LogCaptureFixture) -> None:
     agent = _agent()
-    event = _command_event(commander_token="wrong-token")
     with caplog.at_level("CRITICAL"):
-        assert await agent._validate_commander(event) is False
+        assert await agent._validate_commander(_command_event(source="intruder")) is False
     assert "UNAUTHORIZED" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_commander_missing_token_rejects(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("COMMANDER_AUTH_TOKEN", "tok-secret-123")
+async def test_commander_rejection_rate_limited(caplog: pytest.LogCaptureFixture) -> None:
     agent = _agent()
-    assert await agent._validate_commander(_command_event()) is False
-
-
-@pytest.mark.asyncio
-async def test_commander_name_fallback_without_env_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("COMMANDER_AUTH_TOKEN", raising=False)
-    agent = _agent()
-    assert await agent._validate_commander(_command_event()) is True
-    assert await agent._validate_commander(_command_event(source="intruder")) is False
+    with caplog.at_level("CRITICAL"):
+        assert await agent._validate_commander(_command_event(source="scanner")) is False
+        assert await agent._validate_commander(_command_event(source="scanner")) is False
+    assert caplog.text.count("UNAUTHORIZED") == 1

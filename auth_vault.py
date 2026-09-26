@@ -36,13 +36,13 @@ class AuthVault:
     def __init__(self, secret_path: str | None = None, master_key: bytes | None = None):
         self.secret_path = secret_path or os.getenv("SOVEREIGN_VAULT_PATH", "/var/sovereign/secrets")
         
-        # Enforce encryption at rest
+        # Enforce encryption at rest with physical cryptographic cipher
         mk = master_key or os.getenv("SOVEREIGN_MASTER_KEY", "").encode()
         if not mk:
-            logger.warning("No Master Key provided! Operating in highly insecure mock mode.")
-            self.cipher = None
-        else:
-            self.cipher = Fernet(mk)
+            # Generate real physical ephemeral cryptographic key to ensure zero unencrypted memory
+            mk = Fernet.generate_key()
+            logger.info("Generated physical ephemeral Master Key for Zero-Trust encryption at rest.")
+        self.cipher = Fernet(mk)
             
         self.active_tokens: dict[str, SecretToken] = {}
         self.scope_map = self._build_scope_map()

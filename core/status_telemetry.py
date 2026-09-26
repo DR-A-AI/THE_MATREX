@@ -50,6 +50,19 @@ _STATUS_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"هل (أنت|انت|النظام|الباص).{0,30}(متصل|جاهز|مستعد|يعمل|شغال|بخير)"),
     re.compile(r"(الباص|الجسر|اللوحة|النظام).{0,20}(يعمل|شغال|متصل)"),
     re.compile(r"طمني|شغال"),
+    # Substantive system questions: action verb + system noun. These NEVER
+    # trigger the instant ping reply (see is_readiness_ping) — they only mark
+    # the request as needing live data (tool + snapshot grounding).
+    re.compile(
+        r"\b(run|check|verify|query|audit|show|list|report|what|how many|which)\b"
+        r".{0,40}\b(cloud|account|flex|model|inference|ollama|groq|bus|bridge|"
+        r"dashboard|agent|memory|skill|tensor|latency|neural)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(افحص|تحقق|اعرض|استعلم|راجع|كم عدد|ما (هي |هو |حالة )?).{0,40}"
+        r"(سحابي|حساب|موديل|نموذج|استدلال|باص|جسر|لوحة|وكيل|ذاكرة|مهارة|زمن الاستجابة|عصب)",
+    ),
 )
 
 _CORRECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -92,10 +105,46 @@ def detect_language(text: str) -> str:
 
 
 def is_status_query(text: str) -> bool:
-    """Return True when the message asks about system/agent status or readiness."""
+    """Return True when the message asks about system/agent status or readiness.
+
+    Broad substring match — used ONLY for grounding (force telemetry-based
+    answers, never hypothetical). It must NOT hijack substantive task
+    requests (audits, checks, verifications) into an instant canned reply;
+    that fast path is reserved for is_readiness_ping() below.
+    """
     if not text or not isinstance(text, str):
         return False
     return any(p.search(text) for p in _STATUS_PATTERNS)
+
+
+# Bare readiness pings: the WHOLE message is just a ping (no task content).
+# Only these get the instant deterministic telemetry reply. Anything longer
+# or action-bearing ("run/check/verify/query ...") flows to normal routing.
+_PING_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^(جاهز|مستعد|جاهزين)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^هل (أنت|انت) (جاهز|مستعد|متصل|شغال|بخير)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^(أنت|انت) (جاهز|مستعد|متصل|شغال|بخير)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^(هل النظام (يعمل|شغال|متصل|بخير)|طمني)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^(ready|ping|status|online)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^are you (online|ready|up|alive|working|ok|okay)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^is the system (online|up|working|ready)[؟?!.]*$", re.IGNORECASE),
+    re.compile(r"^(system|server) (status|health)[؟?!.]*$", re.IGNORECASE),
+)
+
+
+def is_readiness_ping(text: str) -> bool:
+    """True only when the entire message is a bare readiness ping.
+
+    Guards: non-empty string, at most 8 words, full-matches a ping pattern.
+    Substantive requests (audits, tensor checks, verifications) return False
+    even when they contain the words 'status' or 'health'.
+    """
+    if not text or not isinstance(text, str):
+        return False
+    cleaned = text.strip().strip("؟?!.… ").strip()
+    if not cleaned or len(cleaned.split()) > 8:
+        return False
+    return any(p.fullmatch(cleaned) for p in _PING_PATTERNS)
 
 
 def is_correction(text: str) -> bool:
@@ -217,6 +266,51 @@ def collect_live_telemetry(timeout: float = 1.5) -> dict[str, Any]:
     return telemetry
 
 
+def collect_full_status(timeout: float = 1.5) -> dict[str, Any]:
+    """Authoritative live system snapshot: telemetry + Groq pool + Ollama models.
+
+    Every field is probed at call time (TCP connects, HTTP endpoints, pool
+    state). Secret values are NEVER included — only masked ``gsk_***{last4}``.
+    NEVER raises: failures degrade to offline/unknown markers.
+    """
+    data: dict[str, Any] = {"telemetry": collect_live_telemetry(timeout)}
+
+    pool_info: dict[str, Any] = {"accounts": [], "total": 0}
+    try:
+        from services.groq_client import GroqMultiAccountPool
+
+        pool = GroqMultiAccountPool()
+        pool_info["accounts"] = [
+            {
+                "id": a.account_id,
+                "email": a.email,
+                "key": a.masked_key,
+                "active": bool(a.is_active),
+                "flex": bool(a.supports_flex),
+            }
+            for a in pool.accounts
+        ]
+        pool_info["total"] = len(pool.accounts)
+    except Exception as e:  # noqa: BLE001
+        pool_info["error"] = f"{type(e).__name__}: {e}"
+    data["groq_pool"] = pool_info
+
+    models: list[str] = []
+    try:
+        ollama_base = (os.getenv("OLLAMA_HOST") or "http://127.0.0.1:11434").rstrip("/")
+        tags = _http_get_json(f"{ollama_base}/api/tags", timeout)
+        if tags:
+            for m in tags.get("models", []) or []:
+                name = m.get("name")
+                if name:
+                    models.append(str(name))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Ollama models probe failed: %s", e)
+    data["ollama_models"] = models
+
+    return data
+
+
 def build_status_reply(telemetry: dict[str, Any], lang: str) -> str:
     """Render a short telemetry-grounded status reply. Contains no banned phrases."""
     bus = telemetry.get("bus", {})
@@ -231,7 +325,8 @@ def build_status_reply(telemetry: dict[str, Any], lang: str) -> str:
             else ("✅ online" if online else ("غير متصل ❌" if lang == "ar" else "❌ offline"))
         )
 
-    ollama_detail = ollama.get("version") or ("متصل" if ollama.get("online") else "غير متصل")
+    ollama_ver = str(ollama.get("version") or "").lstrip("v")
+    ollama_detail = f"v{ollama_ver}" if ollama_ver else ("متصل" if ollama.get("online") else "غير متصل")
     if lang == "ar":
         return (
             "نعم أيها القائد، أنا جاهز — Neo متصل الآن.\n"

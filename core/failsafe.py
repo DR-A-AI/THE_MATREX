@@ -70,7 +70,7 @@ class FailsafeMonitor:
         """
         score = self.calculate_stability_score()
 
-        # Require 95+ score and at least 1 hour of simulated uptime (or 50 events)
+        # Require 95+ score and at least 50 verified telemetry events
         return score >= 95.0 and self.metrics["total_events"] > 50
 
     def create_pre_danger_restore_point(self, operation_name: str) -> str:

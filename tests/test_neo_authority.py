@@ -2,8 +2,6 @@ import asyncio
 import sys
 import time
 
-sys.path.append(r"J:\THE_MATRIX")
-
 from core.models import EventPayload, EventType
 from core.neural_bus import NeuralBusClient
 

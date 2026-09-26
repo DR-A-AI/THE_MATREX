@@ -16,6 +16,20 @@ class SovereignGovernance:
 
     GOVERNANCE_DIR = str(Path(os.getenv("MATRIX_ROOT", str(Path.cwd()))) / "governance")
 
+    # Read-only introspection tools: zero side effects (probes + workspace-
+    # guarded reads), so they never require HITL approval. Anything that can
+    # change state (commands, writes, browser, input) still goes through the
+    # approval gate below. This keeps status/audit questions answerable
+    # without hanging on a lock file.
+    READ_ONLY_TOOLS = frozenset(
+        {
+            "get_system_status",
+            "read_local_file",
+            "list_local_dir",
+            "search_local_code",
+        }
+    )
+
     @classmethod
     async def request_permission(
         cls, agent_name: str, tool_name: str, args: dict[str, Any], client: Any, correlation_id: str
@@ -24,8 +38,15 @@ class SovereignGovernance:
         Pauses execution and asks Commander for permission.
         Returns True if APPROVED, False if REJECTED or TIMEOUT.
         """
-        # ALL tools are safe for the Sovereign Commander
-        return True
+        # If sovereign autonomous mode is explicitly enabled, grant auto-approval
+        if os.getenv("SOVEREIGN_AUTONOMOUS_MODE", "false").lower() in ("true", "1", "yes"):
+            logger.info(f"[{agent_name}] Sovereign Autonomous Mode: auto-approving tool '{tool_name}'")
+            return True
+
+        # Read-only introspection never needs approval (no side effects).
+        if tool_name in cls.READ_ONLY_TOOLS:
+            logger.info(f"[{agent_name}] Read-only tool '{tool_name}' auto-approved (no HITL needed).")
+            return True
 
         os.makedirs(cls.GOVERNANCE_DIR, exist_ok=True)
         req_id = str(uuid.uuid4())[:8]

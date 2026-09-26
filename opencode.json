@@ -1,0 +1,68 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "neo",
+  "subagent_depth": 3,
+  "instructions": ["AGENTS.md", "SOVEREIGN_CONSTITUTION.md"],
+  "mcp": {
+    "matrix_shell": {
+      "type": "local",
+      "command": [
+        "/usr/bin/node",
+        "/mnt/k/mcp/shell/server.js"
+      ],
+      "environment": {
+        "NODE_PATH": "/mnt/k/mcp/shell/node_modules",
+        "SHELL_CWD": "/mnt/e/matrex-dev",
+        "SHELL_ROOT": "/mnt/e/matrex-dev",
+        "SHELL_TIMEOUT_MS": "5000",
+        "SHELL_MAX_BUFFER": "262144",
+        "SHELL_ALLOWLIST": "node,python,python3,git"
+      },
+      "timeout": 15000,
+      "enabled": true
+    },
+    "chrome_devtools": {
+      "type": "local",
+      "command": [
+        "/usr/bin/node",
+        "/mnt/k/mcp/chrome-devtools/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+        "--headless",
+        "--isolated",
+        "--no-usage-statistics",
+        "--workspace",
+        "/mnt/e/matrex-dev"
+      ],
+      "enabled": true
+    },
+    "syncfusion": {
+      "type": "local",
+      "command": [
+        "/usr/bin/node",
+        "/mnt/k/mcp/syncfusion/server.js"
+      ],
+      "environment": {
+        "SYNCFUSION_LICENSE_KEY": "Ngo9BigBOggjGyl/VkV+XU9AclRDX3xKf0x/TGpQb19xflBPallYVBYiSV9jS3hTc0VqWXdednVUQ2JYVU91XA=="
+      },
+      "enabled": true
+    },
+    "github": {
+      "type": "local",
+      "command": [
+        "/home/AH/.local/bin/github-mcp-server",
+        "stdio"
+      ],
+      "enabled": true
+    }
+  },
+  "lsp": true,
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "git status*": "allow",
+      "git log*": "allow",
+      "git diff*": "allow",
+      "python*": "allow",
+      "pytest*": "allow"
+    }
+  }
+}

@@ -4,7 +4,7 @@
 **Role:** Main AI Architect & System Engineer (Antigravity)
 
 ## 1. System Architecture
-- **Location:** `J:\THE_MATRIX`
+- **Location:** Workspace root (dynamic via `MATRIX_ROOT`)
 - **Core Components:**
   - `matrix_main.py`: Bootstrapper and Agent process launcher.
   - `services/ui_bridge.py`: WebSocket server bridging ZMQ to the React frontend.
@@ -15,7 +15,7 @@
 ## 2. API Keys & Rate Limiting
 - **The 20 Key Router:** 
   - 40 unique keys are stored on the Commander's desktop: `C:\Users\ai\Desktop\مجلد الاسرار\The_Sovereign_Commander\20 مشروع\dr` & `r11`.
-  - The first 20 keys have been injected into `J:\THE_MATRIX\.env` (Variables: `EXTRA01_API_KEY` to `EXTRA20_API_KEY`).
+  - The first 20 keys have been injected into `.env` (Variables: `EXTRA01_API_KEY` to `EXTRA20_API_KEY`).
   - `neo_agent.py` was updated to perform "Instant Key Rotation" (no 60s sleep) upon hitting a 429 Error, sending real-time `STATE_UPDATE` to the UI (`Rate Limit Hit. Rotating Key...`).
 
 ## 3. UI & State Persistence
@@ -30,7 +30,7 @@
 - This file acts as the ultimate reference for Antigravity. If confused, READ THIS FILE.
 
 ## 5. Startup Procedure
-- `J:\THE_MATRIX\start_matrix.bat` is configured to launch the 3 detached windows (Engine, Bridge, Dashboard) correctly.
+- `start_matrix.bat` is configured to launch the 3 detached windows (Engine, Bridge, Dashboard) correctly.
 
 ---
 *End of Memory File. Update this file continuously whenever critical project changes occur.*

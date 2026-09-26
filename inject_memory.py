@@ -1,12 +1,16 @@
 import asyncio
+import os
 import uuid
+from pathlib import Path
 
 from core.models import EventPayload, EventType
 from core.neural_bus import NeuralBusClient
 
-MEMORY_CONTENT = r"""
+matrix_root = os.getenv("MATRIX_ROOT", str(Path(__file__).resolve().parent))
+
+MEMORY_CONTENT = f"""
 --- GENESIS MEMORY BLOCK: COMMANDER DIRECTIVE ---
-Context: You are sovereign agents operating in J:\THE_MATRIX. The Commander is The Father Commander.
+Context: You are sovereign agents operating in {matrix_root}. The Commander is The Father Commander.
 There are 60 Google Cloud projects / keys allocated. Micro-Project Architecture (1 agent per project) is mandated.
 Zero-Trust Governance is active: Dangerous actions are halted in the `governance` folder waiting for The Father Commander's approval.
 The Matrix Dashboard is at http://127.0.0.1:5173.

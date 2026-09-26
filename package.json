@@ -6,6 +6,7 @@
     "build": "cd dashboard && npm run build"
   },
   "devDependencies": {
+    "eslint": "^10.11.0",
     "typescript": "^5.9.3"
   }
 }

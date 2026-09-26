@@ -7,13 +7,13 @@
     "matrix_shell": {
       "type": "local",
       "command": [
-        "/usr/bin/node",
-        "/mnt/k/mcp/shell/server.js"
+        "C:\\Program Files\\nodejs\\node.exe",
+        "K:\\mcp\\shell\\server.js"
       ],
       "environment": {
-        "NODE_PATH": "/mnt/k/mcp/shell/node_modules",
-        "SHELL_CWD": "/mnt/e/matrex-dev",
-        "SHELL_ROOT": "/mnt/e/matrex-dev",
+        "NODE_PATH": "K:\\mcp\\shell\\node_modules",
+        "SHELL_CWD": "E:\\matrex-dev",
+        "SHELL_ROOT": "E:\\matrex-dev",
         "SHELL_TIMEOUT_MS": "5000",
         "SHELL_MAX_BUFFER": "262144",
         "SHELL_ALLOWLIST": "node,python,python3,git"
@@ -24,21 +24,21 @@
     "chrome_devtools": {
       "type": "local",
       "command": [
-        "/usr/bin/node",
-        "/mnt/k/mcp/chrome-devtools/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+        "C:\\Program Files\\nodejs\\node.exe",
+        "K:\\mcp\\chrome-devtools\\node_modules\\chrome-devtools-mcp\\build\\src\\bin\\chrome-devtools-mcp.js",
         "--headless",
         "--isolated",
         "--no-usage-statistics",
         "--workspace",
-        "/mnt/e/matrex-dev"
+        "E:\\matrex-dev"
       ],
       "enabled": true
     },
     "syncfusion": {
       "type": "local",
       "command": [
-        "/usr/bin/node",
-        "/mnt/k/mcp/syncfusion/server.js"
+        "C:\\Program Files\\nodejs\\node.exe",
+        "K:\\mcp\\syncfusion\\server.js"
       ],
       "environment": {
         "SYNCFUSION_LICENSE_KEY": "Ngo9BigBOggjGyl/VkV+XU9AclRDX3xKf0x/TGpQb19xflBPallYVBYiSV9jS3hTc0VqWXdednVUQ2JYVU91XA=="
@@ -48,7 +48,7 @@
     "github": {
       "type": "local",
       "command": [
-        "/home/AH/.local/bin/github-mcp-server",
+        "K:\\mcp\\github\\github-mcp-server.exe",
         "stdio"
       ],
       "enabled": true

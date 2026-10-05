@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/THE_MATREX/',
+  base: process.env.GITHUB_ACTIONS ? '/THE_MATREX/' : '/',
   plugins: [react(), tailwindcss()],
   server: {
     host: '127.0.0.1',

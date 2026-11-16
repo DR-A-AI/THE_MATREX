@@ -1,9 +1,9 @@
 {
   "upstream": "https://github.com/github/awesome-copilot",
   "ref": "main",
-  "commit": "b13e55f85ffdf451d40d09839cb1e337bf3eda98",
-  "permalink": "https://github.com/github/awesome-copilot/tree/b13e55f85ffdf451d40d09839cb1e337bf3eda98",
-  "synced_at": "2026-11-09T12:52:37Z",
-  "counts": { "skills": 1528, "agents": 224, "instructions": 195 },
+  "commit": "dc0083dbe22133bfa7ce3500dee85e187e0cd47a",
+  "permalink": "https://github.com/github/awesome-copilot/tree/dc0083dbe22133bfa7ce3500dee85e187e0cd47a",
+  "synced_at": "2026-11-16T12:45:31Z",
+  "counts": { "skills": 1555, "agents": 229, "instructions": 195 },
   "missing": 0
 }
